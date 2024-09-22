@@ -16,6 +16,7 @@ mod token_curve {
         max_xrd: Decimal,
         multiplier: PreciseDecimal,
         xrd_vault: Vault,
+        last_price: Decimal,
     }
 
     impl TokenCurve {
@@ -86,6 +87,7 @@ mod token_curve {
                 max_xrd,
                 multiplier,
                 xrd_vault: Vault::new(XRD),
+                last_price: Decimal::ZERO,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(
@@ -130,6 +132,8 @@ mod token_curve {
                 out_bucket.put(self.token_manager.mint(receive_tokens.clone()));
                 self.current_supply = self.current_supply + receive_tokens.clone();
                 self.xrd_vault.put(in_bucket.take(xrd_amount));
+                self.last_price =
+                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
             }
             (out_bucket, in_bucket)
         }
@@ -159,6 +163,8 @@ mod token_curve {
                 out_bucket.put(self.token_manager.mint(amount.clone()));
                 self.current_supply = self.current_supply + amount;
                 self.xrd_vault.put(in_bucket.take(xrd_required));
+                self.last_price =
+                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
             }
             (out_bucket, in_bucket)
         }
@@ -186,6 +192,8 @@ mod token_curve {
                 burn_bucket.burn();
                 self.current_supply = self.current_supply - token_amount.clone();
                 out_bucket.put(self.xrd_vault.take(receive_xrd.clone()));
+                self.last_price =
+                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
             }
             (out_bucket, in_bucket)
         }
@@ -219,12 +227,10 @@ mod token_curve {
                 burn_bucket.burn();
                 self.current_supply = self.current_supply - tokens_to_sell;
                 out_bucket.put(self.xrd_vault.take(amount.clone()));
+                self.last_price =
+                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
             }
             (out_bucket, in_bucket)
-        }
-
-        pub fn current_price(&self) -> Decimal {
-            TokenCurve::calculate_price(&self.current_supply, &self.multiplier)
         }
 
         fn calculate_price(supply: &Decimal, multiplier: &PreciseDecimal) -> Decimal {
@@ -238,7 +244,7 @@ mod token_curve {
         }
 
         fn calculate_buy_price(
-            mut new_tokens: Decimal,
+            new_tokens: Decimal,
             supply: Decimal,
             multiplier: PreciseDecimal,
         ) -> Decimal {

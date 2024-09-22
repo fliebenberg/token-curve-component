@@ -1,7 +1,18 @@
-// use radix_engine_interface::prelude::*;
-// use scrypto::this_package;
-// use scrypto_test::prelude::*;
-// use scrypto_unit::*;
+pub mod utils;
+
+use radix_engine_interface::prelude::*;
+use scrypto::this_package;
+use scrypto_test::prelude::*;
+use scrypto_unit::*;
+
+#[test]
+fn setup_env_test() {
+    let env = utils::setup_test_env();
+    println!(
+        "Test env owner account address: {:?}",
+        env.owner_account.address
+    );
+}
 
 // // use meme_token::test_bindings::*;
 
