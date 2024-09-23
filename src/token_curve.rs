@@ -52,7 +52,7 @@ mod token_curve {
             parent_address: ComponentAddress,
         ) -> (Global<TokenCurve>, NonFungibleBucket, ComponentAddress) {
             let _parent_instance = Global::<TokenCurves>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
-            let require_parent = rule!(require(global_caller(parent_address.clone())));
+                                                                                        // let require_parent = rule!(require(global_caller(parent_address.clone())));
             let (address_reservation, component_address) =
                 Runtime::allocate_component_address(<TokenCurve>::blueprint_id());
             let require_component_rule = rule!(require(global_caller(component_address.clone())));
@@ -228,7 +228,7 @@ mod token_curve {
                 in_bucket.resource_address() == self.token_manager.address(),
                 "Wrong tokens sent in bucket"
             );
-            let mut token_amount = in_bucket.amount();
+            let token_amount = in_bucket.amount();
             if token_amount > self.current_supply {
                 panic!("Unexpected error! Sending more tokens to sell than current supply.");
             }
