@@ -50,7 +50,7 @@ mod token_curve {
             max_xrd: Decimal,
             multiplier: PreciseDecimal,
             parent_address: ComponentAddress,
-        ) -> (Global<TokenCurve>, NonFungibleBucket) {
+        ) -> (Global<TokenCurve>, NonFungibleBucket, ComponentAddress) {
             let _parent_instance = Global::<TokenCurves>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
             let require_parent = rule!(require(global_caller(parent_address.clone())));
             let (address_reservation, component_address) =
@@ -147,7 +147,7 @@ mod token_curve {
                 }
             })
             .globalize();
-            (new_token_curve, owner_badge)
+            (new_token_curve, owner_badge, component_address)
         }
 
         pub fn buy(&mut self, mut in_bucket: Bucket) -> (Bucket, Bucket) {

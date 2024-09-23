@@ -13,6 +13,7 @@ mod token_curves {
         max_token_supply: Decimal,
         max_xrd: Decimal,
         multiplier: PreciseDecimal,
+        tokens: KeyValueStore<ComponentAddress, ComponentAddress>,
     }
 
     impl TokenCurves {
@@ -36,15 +37,9 @@ mod token_curves {
             let dapp_def_account =
                 Blueprint::<Account>::create_advanced(OwnerRole::Updatable(rule!(allow_all)), None); // will reset owner role after dapp def metadata has been set
             dapp_def_account.set_metadata("account_type", String::from("dapp definition"));
-            dapp_def_account.set_metadata("name", format!("Radix Meme Tokens Parent Component"));
-            dapp_def_account.set_metadata(
-                "description",
-                format!("A component that controls the creation of new meme tokens on Radix"),
-            );
-            dapp_def_account.set_metadata(
-                "icon_url",
-                Url::of("https://app.hydratestake.com/assets/hydrate_icon_light_blue.png"),
-            );
+            dapp_def_account.set_metadata("name", name.clone());
+            dapp_def_account.set_metadata("description", description.clone());
+            dapp_def_account.set_metadata("info_url", Url::of(info_url.clone()));
             dapp_def_account.set_metadata(
                 "claimed_entities",
                 vec![GlobalAddress::from(component_address.clone())],
@@ -58,6 +53,7 @@ mod token_curves {
                 max_token_supply,
                 max_xrd,
                 multiplier,
+                tokens: KeyValueStore::new(),
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(
@@ -89,7 +85,7 @@ mod token_curves {
             x: String,
             website: String,
         ) -> (Global<TokenCurve>, NonFungibleBucket) {
-            let (new_instance, owner_badge) = Blueprint::<TokenCurve>::new(
+            let (new_instance, owner_badge, component_address) = Blueprint::<TokenCurve>::new(
                 name,
                 symbol,
                 description,
@@ -102,6 +98,8 @@ mod token_curves {
                 self.multiplier.clone(),
                 self.address.clone(),
             );
+            self.tokens
+                .insert(component_address.clone(), component_address.clone());
             (new_instance, owner_badge)
         }
     }
