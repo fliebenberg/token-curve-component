@@ -8,6 +8,10 @@ struct OwnerBadgeData {
 }
 
 #[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
+struct RadixMemeTokenCreateEvent {
+    token_address: ResourceAddress,
+}
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
 struct RadixMemeTokenTradeEvent {
     token_address: ResourceAddress,
     side: String,
@@ -99,7 +103,7 @@ mod token_curve {
             let dapp_def_account =
                 Blueprint::<Account>::create_advanced(OwnerRole::Updatable(rule!(allow_all)), None); // will reset owner role after dapp def metadata has been set
             dapp_def_account.set_metadata("account_type", String::from("dapp definition"));
-            dapp_def_account.set_metadata("name", format!("Token Curve: {}", symbol));
+            dapp_def_account.set_metadata("name", format!("Radix Meme Token Curve: {}", symbol));
             dapp_def_account
                 .set_metadata("description", format!("Radix Meme Token Curve: {}", name));
             dapp_def_account.set_metadata(
@@ -133,15 +137,15 @@ mod token_curve {
             // .roles(roles! {
             //     hydrate_admin => admin_rule.clone();
             // })
-            // .metadata(metadata! {
-            //     init {
-            //         "name" => name.clone(), updatable;
-            //         "description" => description.clone(), updatable;
-            //         "info_url" => Url::of(String::from("https://hydratestake.com")), updatable;
-            //         "tags" => vec!["Hydrate"], updatable;
-            //         "dapp_definition" => dapp_def_address.clone(), updatable;
-            //     }
-            // })
+            .metadata(metadata! {
+                init {
+                    "name" => format!("Radix Meme Token Curve: {}", symbol.clone()), updatable;
+                    "description" => format!("Radix Meme Token Curve component for token {}({})", name.clone(), symbol.clone()), updatable;
+                    "info_url" => Url::of(String::from("https://radix.meme")), updatable;
+                    "tags" => vec!["Meme","Token", "Curve"], updatable;
+                    "dapp_definition" => dapp_def_address.clone(), updatable;
+                }
+            })
             .globalize();
             (new_token_curve, owner_badge)
         }
