@@ -1,9 +1,6 @@
-pub mod utils;
-
-use radix_engine_interface::prelude::*;
-use scrypto::this_package;
 use scrypto_test::prelude::*;
-use scrypto_unit::*;
+
+pub mod utils;
 
 #[test]
 fn setup_env_test() {
@@ -11,6 +8,17 @@ fn setup_env_test() {
     println!(
         "Test env owner account address: {:?}",
         env.owner_account.address
+    );
+}
+
+#[test]
+fn first_buy_test() {
+    let mut env = utils::setup_test_env();
+    let first_buy_receipt = utils::txs::token_buy(
+        dec!(100),
+        &env.owner_account,
+        &env.token1_component,
+        &mut env.test_runner,
     );
 }
 

@@ -23,7 +23,9 @@ struct RadixMemeTokenTradeEvent {
 #[blueprint]
 #[events(RadixMemeTokenTradeEvent)]
 mod token_curve {
-
+    enable_function_auth! {
+        new => AccessRule::AllowAll;
+    }
     struct TokenCurve {
         parent_address: ComponentAddress,
         owner_badge_address: ResourceAddress,
@@ -56,8 +58,18 @@ mod token_curve {
             let (address_reservation, component_address) =
                 Runtime::allocate_component_address(<TokenCurve>::blueprint_id());
             let require_component_rule = rule!(require(global_caller(component_address.clone())));
+
+            info!("Before creating owner badge");
             let owner_badge =
                 ResourceBuilder::new_ruid_non_fungible(OwnerRole::Updatable(AccessRule::AllowAll)) // this will be reset to any who owns the token after the token has been created
+                    .mint_roles(mint_roles! {
+                        minter => rule!(allow_all);
+                        minter_updater => rule!(allow_all);
+                    })
+                    .burn_roles(burn_roles! {
+                        burner => rule!(deny_all);
+                        burner_updater => rule!(deny_all);
+                    })
                     .metadata(metadata!(
                         init {
                             "name" => format!("{} owner badge.", name.clone()), updatable;
@@ -69,10 +81,15 @@ mod token_curve {
                     .mint_initial_supply([OwnerBadgeData {
                         name: "Owner Badge 1".to_owned(),
                     }]);
+            info!("After creating owner badge");
             let owner_badge_manager = owner_badge.resource_manager();
-            owner_badge_manager.set_owner_role(rule!(require(owner_badge.resource_address()))); // set owner role to be anyone with an owner badge
+            info!("Testing 1");
             owner_badge_manager.set_mintable(rule!(require(owner_badge.resource_address()))); // any owner badge holder can mint more owner badges
-            owner_badge_manager.set_burnable(rule!(require(owner_badge.resource_address()))); // any owner badge holder cna burn owner badges
+            info!("Testing 4");
+            owner_badge_manager.lock_mintable();
+            info!("Testing 5");
+            owner_badge_manager.set_owner_role(rule!(require(owner_badge.resource_address()))); // set owner role to be anyone with an owner badge
+            info!("After resetting owner badge permissions");
 
             let token_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(
                 require(owner_badge.resource_address())
