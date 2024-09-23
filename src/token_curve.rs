@@ -1,3 +1,4 @@
+use crate::token_curves::token_curves::TokenCurves;
 use scrypto::prelude::*;
 
 #[derive(ScryptoSbor, NonFungibleData)]
@@ -6,10 +7,23 @@ struct OwnerBadgeData {
     pub name: String,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
+struct RadixMemeTokenTradeEvent {
+    token_address: ResourceAddress,
+    side: String,
+    token_amount: Decimal,
+    xrd_amount: Decimal,
+    end_price: Decimal,
+}
+
 #[blueprint]
+#[events(RadixMemeTokenTradeEvent)]
 mod token_curve {
+
     struct TokenCurve {
+        parent_address: ComponentAddress,
         owner_badge_address: ResourceAddress,
+        dapp_def_address: GlobalAddress,
         token_manager: ResourceManager,
         current_supply: Decimal,
         max_supply: Decimal,
@@ -31,7 +45,10 @@ mod token_curve {
             max_supply: Decimal,
             max_xrd: Decimal,
             multiplier: PreciseDecimal,
+            parent_address: ComponentAddress,
         ) -> (Global<TokenCurve>, NonFungibleBucket) {
+            let _parent_instance = Global::<TokenCurves>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
+            let require_parent = rule!(require(global_caller(parent_address.clone())));
             let (address_reservation, component_address) =
                 Runtime::allocate_component_address(<TokenCurve>::blueprint_id());
             let require_component_rule = rule!(require(global_caller(component_address.clone())));
@@ -79,8 +96,27 @@ mod token_curve {
             ))
             .create_with_no_initial_supply();
 
+            let dapp_def_account =
+                Blueprint::<Account>::create_advanced(OwnerRole::Updatable(rule!(allow_all)), None); // will reset owner role after dapp def metadata has been set
+            dapp_def_account.set_metadata("account_type", String::from("dapp definition"));
+            dapp_def_account.set_metadata("name", format!("Token Curve: {}", symbol));
+            dapp_def_account
+                .set_metadata("description", format!("Radix Meme Token Curve: {}", name));
+            dapp_def_account.set_metadata(
+                "icon_url",
+                Url::of("https://app.hydratestake.com/assets/hydrate_icon_light_blue.png"),
+            );
+            dapp_def_account.set_metadata(
+                "claimed_entities",
+                vec![GlobalAddress::from(component_address.clone())],
+            );
+            dapp_def_account.set_owner_role(rule!(require(owner_badge.resource_address())));
+            let dapp_def_address = GlobalAddress::from(dapp_def_account.address());
+
             let new_token_curve = TokenCurve {
+                parent_address,
                 owner_badge_address: owner_badge.resource_address(),
+                dapp_def_address,
                 token_manager,
                 current_supply: Decimal::ZERO,
                 max_supply,
@@ -134,6 +170,13 @@ mod token_curve {
                 self.xrd_vault.put(in_bucket.take(xrd_amount));
                 self.last_price =
                     TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                Runtime::emit_event(RadixMemeTokenTradeEvent {
+                    token_address: self.token_manager.address(),
+                    side: String::from("buy"),
+                    token_amount: out_bucket.amount(),
+                    xrd_amount: xrd_amount.clone(),
+                    end_price: self.last_price.clone(),
+                });
             }
             (out_bucket, in_bucket)
         }
@@ -165,6 +208,13 @@ mod token_curve {
                 self.xrd_vault.put(in_bucket.take(xrd_required));
                 self.last_price =
                     TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                Runtime::emit_event(RadixMemeTokenTradeEvent {
+                    token_address: self.token_manager.address(),
+                    side: String::from("buy"),
+                    token_amount: out_bucket.amount(),
+                    xrd_amount: xrd_required.clone(),
+                    end_price: self.last_price.clone(),
+                });
             }
             (out_bucket, in_bucket)
         }
@@ -194,6 +244,13 @@ mod token_curve {
                 out_bucket.put(self.xrd_vault.take(receive_xrd.clone()));
                 self.last_price =
                     TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                Runtime::emit_event(RadixMemeTokenTradeEvent {
+                    token_address: self.token_manager.address(),
+                    side: String::from("sell"),
+                    token_amount: token_amount.clone(),
+                    xrd_amount: out_bucket.amount(),
+                    end_price: self.last_price.clone(),
+                });
             }
             (out_bucket, in_bucket)
         }
@@ -229,6 +286,13 @@ mod token_curve {
                 out_bucket.put(self.xrd_vault.take(amount.clone()));
                 self.last_price =
                     TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                Runtime::emit_event(RadixMemeTokenTradeEvent {
+                    token_address: self.token_manager.address(),
+                    side: String::from("sell"),
+                    token_amount: tokens_to_sell.clone(),
+                    xrd_amount: out_bucket.amount(),
+                    end_price: self.last_price.clone(),
+                });
             }
             (out_bucket, in_bucket)
         }
