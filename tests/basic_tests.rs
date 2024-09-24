@@ -12,19 +12,110 @@ fn setup_env_test() {
 }
 
 #[test]
-fn first_buy_test() {
+fn simple_buy_sell_tests() {
     let mut env = utils::setup_test_env();
-    println!("Token state before buy:");
-    utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    // println!("Token state before buy:");
+    // utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
     let first_buy_receipt = utils::txs::token_buy(
         dec!(100),
         &env.owner_account,
         &env.token1_component,
         &mut env.test_runner,
     );
-    println!("First buy receipt: {:?}", first_buy_receipt);
-    println!("Token state after buy:");
+    // println!("First buy receipt: {:?}", first_buy_receipt);
+    // println!("Token state after buy:");
+    // utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
+    assert!(
+        token_state.last_price == dec!("0.004481404746557164"),
+        "Incorrect price after buy"
+    );
+    assert!(
+        token_state.current_supply == dec!("66943.295008216952188265"),
+        "Incorrect supply after buy"
+    );
+
+    let first_sell_receipt = utils::txs::token_sell(
+        dec!("66943.295008216952188265"),
+        &env.token1_address,
+        &env.owner_account,
+        &env.token1_component,
+        &mut env.test_runner,
+    );
+    let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
+    assert!(
+        token_state.last_price == dec!("0"),
+        "Incorrect current price after sell"
+    );
+    assert!(
+        token_state.current_supply == dec!("0"),
+        "Incorrect supply after sell"
+    );
+
+    let second_buy_receipt = utils::txs::token_buy_amount(
+        dec!("66943.295008216952188265"),
+        dec!("100"),
+        &env.owner_account,
+        &env.token1_component,
+        &mut env.test_runner,
+    );
+
+    let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
+    assert!(
+        token_state.last_price == dec!("0.004481404746557164"),
+        "Incorrect current price after sell"
+    );
+    assert!(
+        token_state.current_supply == dec!("66943.295008216952188265"),
+        "Incorrect supply after sell"
+    );
+
+    println!("Before 2nd sell: ");
     utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    let token_balance = env.test_runner.get_component_balance(
+        env.owner_account.address.clone(),
+        env.token1_address.clone(),
+    );
+    println!("Token balance: {:?}", token_balance);
+
+    let second_sell_receipt = utils::txs::token_sell_for_xrd_amount(
+        dec!("50"),
+        dec!("66943.295008216952188265"),
+        &env.token1_address,
+        &env.owner_account,
+        &env.token1_component,
+        &mut env.test_runner,
+    );
+    let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
+    println!("After 2nd sell: ");
+    utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    assert!(
+        token_state.last_price == dec!("0.002823108086643085"),
+        "Incorrect current price after sell for xrd amount"
+    );
+    assert!(
+        token_state.current_supply == dec!("53132.928459130553302386"),
+        "Incorrect supply after sell for xrd amount"
+    );
+
+    let last_sell_receipt = utils::txs::token_sell(
+        dec!("53132.928459130553302386"),
+        &env.token1_address,
+        &env.owner_account,
+        &env.token1_component,
+        &mut env.test_runner,
+    );
+    let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
+    println!("After last sell: ");
+    utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    assert!(
+        token_state.last_price == dec!("0"),
+        "Incorrect current price after sell for xrd amount"
+    );
+    assert!(
+        token_state.current_supply == dec!("0"),
+        "Incorrect supply after sell for xrd amount"
+    );
 }
 
 // // use meme_token::test_bindings::*;

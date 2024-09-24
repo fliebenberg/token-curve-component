@@ -291,12 +291,14 @@ mod token_curve {
                 panic!("Not enough XRD in vault for requested amount.");
             }
             let mut out_bucket = Bucket::new(XRD);
+            info!("In bucket amount: {:?}", in_bucket.amount());
             if amount > Decimal::ZERO {
                 let tokens_to_sell = TokenCurve::calculate_tokens_to_sell(
                     amount.clone(),
                     self.current_supply.clone(),
                     self.multiplier.clone(),
                 );
+                info!("Tokens required: {:?}", tokens_to_sell);
                 if tokens_to_sell > in_bucket.amount() {
                     panic!("Not enough tokens supplied for required amount of XRD");
                 }
@@ -425,20 +427,28 @@ mod token_curve {
             let mut result = Decimal::ZERO;
             if xrd_required > Decimal::ZERO {
                 let precise_xrd_required = PreciseDecimal::from(xrd_required.clone());
+                // info!("Precise XRD required: {:?}", precise_xrd_required);
                 let precise_supply = PreciseDecimal::from(supply.clone());
-                let first_value = precise_xrd_required
+                // info!("Precise supply: {:?}", precise_supply);
+                let mut first_value = precise_xrd_required
                     .checked_div(multiplier.clone())
                     .expect("calculate_tokens_to_sell problem. First div");
-                first_value
+                first_value = first_value
                     .checked_mul(3)
                     .expect("calculate_tokens_to_sell problem. First mul");
+                // info!("First value: {:?}", first_value);
                 let second_value = precise_supply
                     .checked_powi(3)
                     .expect("calculate_tokens_to_sell problem. First powi");
-                let third_value = (second_value - first_value)
+                // info!("Second value: {:?}", second_value);
+                let third_value = second_value - first_value;
+                // info!("Third value: {:?}", third_value);
+                let fourth_value = third_value
                     .checked_nth_root(3)
                     .expect("calculate_tokens_to_sell problem. First root");
-                let precise_result = precise_supply - third_value;
+                // info!("Fourth value: {:?}", fourth_value);
+                let precise_result = precise_supply - fourth_value;
+                // info!("Precise Result: {:?}", precise_result);
                 result = Decimal::try_from(precise_result).expect(
                     "calculate_tokens_to_sell problem. Cant convert precise decimal to decimal.",
                 );
