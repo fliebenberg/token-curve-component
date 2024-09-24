@@ -14,12 +14,17 @@ fn setup_env_test() {
 #[test]
 fn first_buy_test() {
     let mut env = utils::setup_test_env();
+    println!("Token state before buy:");
+    utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
     let first_buy_receipt = utils::txs::token_buy(
         dec!(100),
         &env.owner_account,
         &env.token1_component,
         &mut env.test_runner,
     );
+    println!("First buy receipt: {:?}", first_buy_receipt);
+    println!("Token state after buy:");
+    utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
 }
 
 // // use meme_token::test_bindings::*;

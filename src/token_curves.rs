@@ -8,12 +8,12 @@ mod token_curves {
     }
 
     struct TokenCurves {
-        address: ComponentAddress,
-        owner_badge_manager: ResourceManager,
-        max_token_supply: Decimal,
-        max_xrd: Decimal,
-        multiplier: PreciseDecimal,
-        tokens: KeyValueStore<ComponentAddress, ComponentAddress>,
+        pub address: ComponentAddress,
+        pub owner_badge_manager: ResourceManager,
+        pub max_token_supply: Decimal,
+        pub max_xrd: Decimal,
+        pub multiplier: PreciseDecimal,
+        pub tokens: KeyValueStore<ComponentAddress, bool>,
     }
 
     impl TokenCurves {
@@ -98,8 +98,7 @@ mod token_curves {
                 self.multiplier.clone(),
                 self.address.clone(),
             );
-            self.tokens
-                .insert(component_address.clone(), component_address.clone());
+            self.tokens.insert(component_address.clone(), true);
             (new_instance, owner_badge)
         }
     }

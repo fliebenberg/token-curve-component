@@ -27,16 +27,17 @@ mod token_curve {
         new => AccessRule::AllowAll;
     }
     struct TokenCurve {
-        parent_address: ComponentAddress,
-        owner_badge_address: ResourceAddress,
-        dapp_def_address: GlobalAddress,
-        token_manager: ResourceManager,
-        current_supply: Decimal,
-        max_supply: Decimal,
-        max_xrd: Decimal,
-        multiplier: PreciseDecimal,
-        xrd_vault: Vault,
-        last_price: Decimal,
+        pub parent_address: ComponentAddress,
+        pub address: ComponentAddress,
+        pub owner_badge_address: ResourceAddress,
+        pub dapp_def_address: GlobalAddress,
+        pub token_manager: ResourceManager,
+        pub max_supply: Decimal,
+        pub max_xrd: Decimal,
+        pub multiplier: PreciseDecimal,
+        pub xrd_vault: Vault,
+        pub last_price: Decimal,
+        pub current_supply: Decimal,
     }
 
     impl TokenCurve {
@@ -136,6 +137,7 @@ mod token_curve {
 
             let new_token_curve = TokenCurve {
                 parent_address,
+                address: component_address.clone(),
                 owner_badge_address: owner_badge.resource_address(),
                 dapp_def_address,
                 token_manager,
@@ -354,6 +356,7 @@ mod token_curve {
             result
         }
 
+        // formula: tokens_received
         fn calculate_tokens_received(
             xrd_received: Decimal,
             supply: Decimal,
@@ -363,18 +366,21 @@ mod token_curve {
             if xrd_received > Decimal::ZERO {
                 let precise_xrd_received = PreciseDecimal::from(xrd_received.clone());
                 let precise_supply = PreciseDecimal::from(supply.clone());
-                let first_value = precise_xrd_received
+                let mut first_value = precise_xrd_received
                     .checked_div(multiplier.clone())
                     .expect("calculate_tokens_received problem. First div");
-                first_value
+                first_value = first_value
                     .checked_mul(3)
                     .expect("calculate_tokens_received problem. First mul");
+                info!("First value: {}", first_value);
                 let second_value = precise_supply
                     .checked_powi(3)
                     .expect("calculate_tokens_received problem. First powi");
-                let third_value = (first_value - second_value)
+                info!("Second value: {}", second_value);
+                let third_value = (first_value + second_value)
                     .checked_nth_root(3)
                     .expect("calculate_tokens_received problem. First root");
+                info!("Third value: {}", third_value);
                 let precise_result = third_value - precise_supply;
                 result = Decimal::try_from(precise_result).expect(
                     "calculate_tokens_received problem. Cant convert precise decimal to decimal.",
