@@ -10,13 +10,15 @@ mod token_curves {
     struct TokenCurves {
         pub address: ComponentAddress,
         pub owner_badge_manager: ResourceManager,
-        pub max_token_supply: Decimal,
-        pub max_xrd: Decimal,
-        pub multiplier: PreciseDecimal,
-        pub tokens: KeyValueStore<ComponentAddress, bool>,
+        pub max_token_supply: Decimal, // the maximum token supply available for trading on the bonding curve
+        pub max_xrd: Decimal, // the maximum xrd that will be needed to get to the maximum token supply
+        pub multiplier: PreciseDecimal, // a constant used in the bonding curve calcs that is determined by the max_token_supply and max_xrd values
+        pub tokens: KeyValueStore<ComponentAddress, bool>, // a simple list of the tokens launched and whether they are still active
     }
 
     impl TokenCurves {
+        // function to create a new TokenCurves (parent) instance. This instance will be used to launch and keep track of the individual token curve components
+        // takes in the resource address to be used as owner badge and other values needed to create the parent component.
         pub fn new(
             name: String,
             description: String,
@@ -60,9 +62,6 @@ mod token_curves {
                 owner_badge_address.clone()
             ))))
             .with_address(address_reservation)
-            // .roles(roles! {
-            //     hydrate_admin => admin_rule.clone();
-            // })
             .metadata(metadata! {
                 init {
                 "name" => name, updatable;
@@ -75,6 +74,9 @@ mod token_curves {
             .globalize()
         }
 
+        // function to create an individual token bonding curve component
+        // takes in values used to set up the new token and its bonding curve component
+        // returns a global instance of the new component as well as an owner badge for the token.
         pub fn new_token_curve_simple(
             &mut self,
             name: String,

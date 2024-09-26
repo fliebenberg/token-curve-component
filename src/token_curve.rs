@@ -27,20 +27,23 @@ mod token_curve {
         new => AccessRule::AllowAll;
     }
     struct TokenCurve {
-        pub parent_address: ComponentAddress,
-        pub address: ComponentAddress,
-        pub owner_badge_address: ResourceAddress,
-        pub dapp_def_address: GlobalAddress,
-        pub token_manager: ResourceManager,
-        pub max_supply: Decimal,
-        pub max_xrd: Decimal,
-        pub multiplier: PreciseDecimal,
-        pub xrd_vault: Vault,
-        pub last_price: Decimal,
-        pub current_supply: Decimal,
+        pub parent_address: ComponentAddress, // address of the parent component that this bonding curve component is part of
+        pub address: ComponentAddress,        // the address of this bonding curve component
+        pub owner_badge_address: ResourceAddress, // the address of the owner badge for this token and component
+        pub dapp_def_address: GlobalAddress,      // the dapp def account address for this component
+        pub token_manager: ResourceManager, // the resource manager for the token created as part of this component
+        pub max_supply: Decimal, // the maximum supply of the token that can be created/traded through this component
+        pub max_xrd: Decimal,    // the maximum XRD that will be received into this component
+        pub multiplier: PreciseDecimal, // the constant multiplier that is used in the bonding curve calcs. This is based on the max_supply and max_xrd values.
+        pub xrd_vault: Vault,           // the vault that holds all the XRD recived by the component
+        pub last_price: Decimal,        // the price reached with the last trade on the component
+        pub current_supply: Decimal, // the current supply of the token associated with this component
     }
 
     impl TokenCurve {
+        // a function that creates a new bonding curve component
+        // the function takes in several values that are used to launch the new token and set up the bonding curve component
+        // the function returns a global instance of the component, a bucket with the owner badge for the new token and the address of the newly created component
         pub fn new(
             name: String,
             symbol: String,
@@ -60,7 +63,6 @@ mod token_curve {
                 Runtime::allocate_component_address(<TokenCurve>::blueprint_id());
             let require_component_rule = rule!(require(global_caller(component_address.clone())));
 
-            info!("Before creating owner badge");
             let owner_badge =
                 ResourceBuilder::new_ruid_non_fungible(OwnerRole::Updatable(AccessRule::AllowAll)) // this will be reset to any who owns the token after the token has been created
                     .mint_roles(mint_roles! {
@@ -82,15 +84,10 @@ mod token_curve {
                     .mint_initial_supply([OwnerBadgeData {
                         name: "Owner Badge 1".to_owned(),
                     }]);
-            info!("After creating owner badge");
             let owner_badge_manager = owner_badge.resource_manager();
-            info!("Testing 1");
             owner_badge_manager.set_mintable(rule!(require(owner_badge.resource_address()))); // any owner badge holder can mint more owner badges
-            info!("Testing 4");
             owner_badge_manager.lock_mintable();
-            info!("Testing 5");
             owner_badge_manager.set_owner_role(rule!(require(owner_badge.resource_address()))); // set owner role to be anyone with an owner badge
-            info!("After resetting owner badge permissions");
 
             let token_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(
                 require(owner_badge.resource_address())
@@ -118,6 +115,7 @@ mod token_curve {
             ))
             .create_with_no_initial_supply();
 
+            // each component creates its own dapp definition account with permission granted to the token owner to change the metadata in future
             let dapp_def_account =
                 Blueprint::<Account>::create_advanced(OwnerRole::Updatable(rule!(allow_all)), None); // will reset owner role after dapp def metadata has been set
             dapp_def_account.set_metadata("account_type", String::from("dapp definition"));
@@ -153,13 +151,10 @@ mod token_curve {
                 owner_badge.resource_address()
             ))))
             .with_address(address_reservation)
-            // .roles(roles! {
-            //     hydrate_admin => admin_rule.clone();
-            // })
             .metadata(metadata! {
                 init {
-                    "name" => format!("Radix Meme Token Curve: {}", symbol.clone()), updatable;
-                    "description" => format!("Radix Meme Token Curve component for token {}({})", name.clone(), symbol.clone()), updatable;
+                    "name" => format!("Binding Curve for {}", symbol.clone()), updatable;
+                    "description" => format!("Radix Meme Token Bonding Curve component for token {} ({})", name.clone(), symbol.clone()), updatable;
                     "info_url" => Url::of(String::from("https://radix.meme")), updatable;
                     "tags" => vec!["Meme","Token", "Curve"], updatable;
                     "dapp_definition" => dapp_def_address.clone(), updatable;
@@ -169,6 +164,9 @@ mod token_curve {
             (new_token_curve, owner_badge, component_address)
         }
 
+        // function to buy tokens form the bonding curve using the sent XRD
+        // function takes a bucket with XRD to use to buy new tokens
+        // function returns a bucket with the bought tokens as well as a bucket with any remaining XRD (if any)
         pub fn buy(&mut self, mut in_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(
                 in_bucket.resource_address() == XRD,
@@ -204,6 +202,9 @@ mod token_curve {
             (out_bucket, in_bucket)
         }
 
+        // function to buy a specificly specified amount of tokens
+        // the function takes in the specified value of tokens that must be bought as well as a bucket of XRD to pay for the tx
+        // the function returns a bucket with the bought tokens as well as a bucket with any remaining XRD (if any)
         pub fn buy_amount(&mut self, amount: Decimal, mut in_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(
                 in_bucket.resource_address() == XRD,
@@ -242,6 +243,9 @@ mod token_curve {
             (out_bucket, in_bucket)
         }
 
+        // function to sell the tokens provided
+        // function takes in a bucket of tokens to sell
+        // function returns a bucket of XRD from the sale as well as a bucket with any remaining tokens (if any)
         pub fn sell(&mut self, mut in_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(
                 in_bucket.resource_address() == self.token_manager.address(),
@@ -278,6 +282,9 @@ mod token_curve {
             (out_bucket, in_bucket)
         }
 
+        // function to sell tokens to the value of the specified XRD amount
+        // the function takes in the amount of XRD to receive as well as a bucket of tokens to sell
+        // the function returns a bucket with XRD and a bucket with any remaining tokens (if any)
         pub fn sell_for_xrd_amount(
             &mut self,
             amount: Decimal,
@@ -322,6 +329,10 @@ mod token_curve {
             (out_bucket, in_bucket)
         }
 
+        // the following calculation functions are all pure functions that (in future) can be moved to seperate components that represent different bonding curves.
+        // This will allow for easier upgradability as well as easier addition of different types of bonding curves.
+
+        // pure function to calculate the current price on the bonding curve based on the current token supply
         fn calculate_price(supply: &Decimal, multiplier: &PreciseDecimal) -> Decimal {
             Decimal::try_from(
                 multiplier.clone()
@@ -332,10 +343,11 @@ mod token_curve {
             .expect("calculate_price problem. Cant convert precise decimal to decimal.")
         }
 
+        // pure function to calculate the buy price (XRD required) in order to receive a specified amount of new tokens
         fn calculate_buy_price(
-            new_tokens: Decimal,
-            supply: Decimal,
-            multiplier: PreciseDecimal,
+            new_tokens: Decimal,        // the amount of tokens to buy
+            supply: Decimal,            // the supply of tokens before the buy transaction
+            multiplier: PreciseDecimal, // the constant multiplier to use in the calcs (mased on max supply and max xrd)
         ) -> Decimal {
             let mut result = Decimal::ZERO;
             if new_tokens > Decimal::ZERO {
@@ -358,11 +370,11 @@ mod token_curve {
             result
         }
 
-        // formula: tokens_received
+        // pure function to calculate how many tokens can be bought with the specified amount of XRD
         fn calculate_tokens_received(
-            xrd_received: Decimal,
-            supply: Decimal,
-            multiplier: PreciseDecimal,
+            xrd_received: Decimal,      // the amount of XRD to spend to buy tokens
+            supply: Decimal,            // the supply of tokens before the buy transaction
+            multiplier: PreciseDecimal, // the constant multiplier to use in the calcs (mased on max supply and max xrd)
         ) -> Decimal {
             let mut result = Decimal::ZERO;
             if xrd_received > Decimal::ZERO {
@@ -391,10 +403,11 @@ mod token_curve {
             result
         }
 
+        // function to calculate the sell price (XRD received) from selling the speficied number of tokens
         fn calculate_sell_price(
-            sell_tokens: Decimal,
-            supply: Decimal,
-            multiplier: PreciseDecimal,
+            sell_tokens: Decimal,       // the amount of tokens to sell
+            supply: Decimal,            // the supply of tokens before the buy transaction
+            multiplier: PreciseDecimal, // the constant multiplier to use in the calcs (mased on max supply and max xrd)
         ) -> Decimal {
             let mut result = Decimal::ZERO;
             if sell_tokens > Decimal::ZERO {
@@ -419,10 +432,11 @@ mod token_curve {
             result
         }
 
+        // function to calculate the amount of tokens to sell to receiv the specified amount of XRD
         fn calculate_tokens_to_sell(
-            xrd_required: Decimal,
-            supply: Decimal,
-            multiplier: PreciseDecimal,
+            xrd_required: Decimal,      // the amount of XRD to receive from selling tokens
+            supply: Decimal,            // the supply of tokens before the buy transaction
+            multiplier: PreciseDecimal, // the constant multiplier to use in the calcs (mased on max supply and max xrd)
         ) -> Decimal {
             let mut result = Decimal::ZERO;
             if xrd_required > Decimal::ZERO {
