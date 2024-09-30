@@ -63,27 +63,29 @@ mod token_curve {
                 Runtime::allocate_component_address(<TokenCurve>::blueprint_id());
             let require_component_rule = rule!(require(global_caller(component_address.clone())));
 
-            let owner_badge =
-                ResourceBuilder::new_ruid_non_fungible(OwnerRole::Updatable(AccessRule::AllowAll)) // this will be reset to any who owns the token after the token has been created
-                    .mint_roles(mint_roles! {
-                        minter => rule!(allow_all);
-                        minter_updater => rule!(allow_all);
-                    })
-                    .burn_roles(burn_roles! {
-                        burner => rule!(deny_all);
-                        burner_updater => rule!(deny_all);
-                    })
-                    .metadata(metadata!(
-                        init {
-                            "name" => format!("{} owner badge.", name.clone()), updatable;
-                            "symbol" => format!("{}", symbol.clone()), updatable;
-                            "icon_url" => Url::of(icon_url.clone()), updatable;
-                            "tags" => vec!["Dexter", "TokenCurve"], updatable;
-                        }
-                    ))
-                    .mint_initial_supply([OwnerBadgeData {
-                        name: "Owner Badge 1".to_owned(),
-                    }]);
+            let owner_badge = ResourceBuilder::new_ruid_non_fungible(OwnerRole::Updatable(
+                AccessRule::AllowAll,
+            )) // this will be reset to any who owns the token after the token has been created
+            .mint_roles(mint_roles! {
+                minter => rule!(allow_all);
+                minter_updater => rule!(allow_all);
+            })
+            .burn_roles(burn_roles! {
+                burner => rule!(deny_all);
+                burner_updater => rule!(deny_all);
+            })
+            .metadata(metadata!(
+                init {
+                    "name" => format!("{} owner badge.", name.clone()), updatable;
+                    "symbol" => format!("{}", symbol.clone()), updatable;
+                    "icon_url" => Url::of(icon_url.clone()), updatable;
+                    "radix_meme_component" => format!("{:?}", component_address.clone()), locked;
+                    "tags" => vec!["Dexter", "TokenCurve"], updatable;
+                }
+            ))
+            .mint_initial_supply([OwnerBadgeData {
+                name: "Owner Badge 1".to_owned(),
+            }]);
             let owner_badge_manager = owner_badge.resource_manager();
             owner_badge_manager.set_mintable(rule!(require(owner_badge.resource_address()))); // any owner badge holder can mint more owner badges
             owner_badge_manager.lock_mintable();
