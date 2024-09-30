@@ -16,7 +16,7 @@ fn simple_buy_sell_tests() {
     let mut env = utils::setup_test_env();
     // println!("Token state before buy:");
     // utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
-    let first_buy_receipt = utils::txs::token_buy(
+    let _first_buy_receipt = utils::txs::token_buy(
         dec!(100),
         &env.owner_account,
         &env.token1_component,
@@ -24,61 +24,134 @@ fn simple_buy_sell_tests() {
     );
     // println!("First buy receipt: {:?}", first_buy_receipt);
     // println!("Token state after buy:");
-    // utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
     let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
     assert!(
         token_state.last_price == dec!("0.004481404746557164"),
         "Incorrect price after buy"
     );
     assert!(
-        token_state.current_supply == dec!("66943.295008216952188265"),
-        "Incorrect supply after buy"
+        token_state.current_supply == dec!("66943.295008216952188266"),
+        "Incorrect supply after buy. {:?}",
+        token_state.current_supply
+    );
+    let component_xrd_balance = env
+        .test_runner
+        .get_component_balance(env.token1_component, XRD);
+    assert!(
+        component_xrd_balance == dec!("100"),
+        "Incorrect XRD in component after first buy. {:?}",
+        component_xrd_balance
+    );
+    let token_balance = env.test_runner.get_component_balance(
+        env.owner_account.address.clone(),
+        env.token1_address.clone(),
+    );
+    assert!(
+        token_balance == dec!("66943.295008216952188266"),
+        "Incorrect token Balance in account after first buy. {:?}",
+        token_balance.clone()
+    );
+    let xrd_balance = env
+        .test_runner
+        .get_component_balance(env.owner_account.address.clone(), XRD);
+    assert!(
+        xrd_balance == dec!("9900"),
+        "Incorrect XRD Balance in account after first buy. {:?}",
+        xrd_balance.clone()
     );
 
-    let first_sell_receipt = utils::txs::token_sell(
-        dec!("66943.295008216952188265"),
+    let _first_sell_receipt = utils::txs::token_sell(
+        dec!("66943.295008216952188266"),
         &env.token1_address,
         &env.owner_account,
         &env.token1_component,
         &mut env.test_runner,
     );
+    // println!("Receipt after first_sell: {:?}", _first_sell_receipt);
     let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
     assert!(
         token_state.last_price == dec!("0"),
-        "Incorrect current price after sell"
+        "Incorrect current price after sell. {:?}",
+        token_state.last_price
     );
     assert!(
         token_state.current_supply == dec!("0"),
-        "Incorrect supply after sell"
+        "Incorrect supply after sell. {:?}",
+        token_state.current_supply
+    );
+    let component_xrd_balance = env
+        .test_runner
+        .get_component_balance(env.token1_component, XRD);
+    assert!(
+        component_xrd_balance == dec!("0"),
+        "Incorrect XRD in component after first sell. {:?}",
+        component_xrd_balance
+    );
+    let token_balance = env.test_runner.get_component_balance(
+        env.owner_account.address.clone(),
+        env.token1_address.clone(),
+    );
+    assert!(
+        token_balance == dec!("0"),
+        "Incorrect token Balance in account after first sell. {:?}",
+        token_balance
+    );
+    let xrd_balance = env
+        .test_runner
+        .get_component_balance(env.owner_account.address.clone(), XRD);
+    assert!(
+        xrd_balance == dec!("10000"),
+        "Incorrect XRD Balance in account after first sell. {:?}",
+        xrd_balance.clone()
     );
 
-    let second_buy_receipt = utils::txs::token_buy_amount(
-        dec!("66943.295008216952188265"),
+    let _second_buy_receipt = utils::txs::token_buy_amount(
+        dec!("66943.295008216952188266"),
         dec!("100"),
         &env.owner_account,
         &env.token1_component,
         &mut env.test_runner,
     );
-
     let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
     assert!(
         token_state.last_price == dec!("0.004481404746557164"),
-        "Incorrect current price after sell"
+        "Incorrect current price after 2nd buy. {:?}",
+        token_state.last_price
     );
     assert!(
-        token_state.current_supply == dec!("66943.295008216952188265"),
-        "Incorrect supply after sell"
+        token_state.current_supply == dec!("66943.295008216952188266"),
+        "Incorrect supply after 2nd buy. {:?}",
+        token_state.current_supply
     );
-
-    println!("Before 2nd sell: ");
-    utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    // utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
+    let component_xrd_balance = env
+        .test_runner
+        .get_component_balance(env.token1_component, XRD);
+    assert!(
+        component_xrd_balance == dec!("100"),
+        "Incorrect XRD in component after 2nd buy. {:?}",
+        component_xrd_balance
+    );
     let token_balance = env.test_runner.get_component_balance(
         env.owner_account.address.clone(),
         env.token1_address.clone(),
     );
-    println!("Token balance: {:?}", token_balance);
+    assert!(
+        token_balance == dec!("66943.295008216952188266"),
+        "Incorrect token Balance in account after 2nd buy. {:?}",
+        token_balance
+    );
+    let xrd_balance = env
+        .test_runner
+        .get_component_balance(env.owner_account.address.clone(), XRD);
+    assert!(
+        xrd_balance == dec!("9900"),
+        "Incorrect XRD Balance in account after 2nd buy. {:?}",
+        xrd_balance.clone()
+    );
 
-    let second_sell_receipt = utils::txs::token_sell_for_xrd_amount(
+    let _second_sell_receipt = utils::txs::token_sell_for_xrd_amount(
         dec!("50"),
         dec!("66943.295008216952188265"),
         &env.token1_address,
@@ -87,19 +160,44 @@ fn simple_buy_sell_tests() {
         &mut env.test_runner,
     );
     let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
-    println!("After 2nd sell: ");
     utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
     assert!(
         token_state.last_price == dec!("0.002823108086643085"),
         "Incorrect current price after sell for xrd amount"
     );
     assert!(
-        token_state.current_supply == dec!("53132.928459130553302386"),
-        "Incorrect supply after sell for xrd amount"
+        token_state.current_supply == dec!("53132.928459130553302387"),
+        "Incorrect supply after sell for xrd amount. {:?}",
+        token_state.current_supply
+    );
+    let component_xrd_balance = env
+        .test_runner
+        .get_component_balance(env.token1_component, XRD);
+    assert!(
+        component_xrd_balance == dec!("50"),
+        "Incorrect XRD in component after sell for xrd amount. {:?}",
+        component_xrd_balance
+    );
+    let token_balance = env.test_runner.get_component_balance(
+        env.owner_account.address.clone(),
+        env.token1_address.clone(),
+    );
+    assert!(
+        token_balance == dec!("53132.928459130553302387"),
+        "Incorrect TOken Balance in wallet after sell for XRD amount. {:?}",
+        token_balance
+    );
+    let xrd_balance = env
+        .test_runner
+        .get_component_balance(env.owner_account.address.clone(), XRD);
+    assert!(
+        xrd_balance == dec!("9950"),
+        "Incorrect XRD Balance in account after sell for XRD amount. {:?}",
+        xrd_balance.clone()
     );
 
-    let last_sell_receipt = utils::txs::token_sell(
-        dec!("53132.928459130553302386"),
+    let _last_sell_receipt = utils::txs::token_sell(
+        dec!("53132.928459130553302387"),
         &env.token1_address,
         &env.owner_account,
         &env.token1_component,
@@ -110,11 +208,36 @@ fn simple_buy_sell_tests() {
     utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
     assert!(
         token_state.last_price == dec!("0"),
-        "Incorrect current price after sell for xrd amount"
+        "Incorrect current price after last sell"
     );
     assert!(
         token_state.current_supply == dec!("0"),
-        "Incorrect supply after sell for xrd amount"
+        "Incorrect supply after last sell"
+    );
+    let component_xrd_balance = env
+        .test_runner
+        .get_component_balance(env.token1_component, XRD);
+    assert!(
+        component_xrd_balance == dec!("0"),
+        "Incorrect XRD in component after last sell. {:?}",
+        component_xrd_balance
+    );
+    let token_balance = env.test_runner.get_component_balance(
+        env.owner_account.address.clone(),
+        env.token1_address.clone(),
+    );
+    assert!(
+        token_balance == dec!("0"),
+        "Incorrect Token Balance in wallet after last sell. {:?}",
+        token_balance
+    );
+    let xrd_balance = env
+        .test_runner
+        .get_component_balance(env.owner_account.address.clone(), XRD);
+    assert!(
+        xrd_balance == dec!("10000"),
+        "Incorrect XRD Balance in account after last sell. {:?}",
+        xrd_balance.clone()
     );
 }
 

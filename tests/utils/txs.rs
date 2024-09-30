@@ -9,7 +9,7 @@ pub fn token_buy(
     test_runner: &mut TestRunnerType,
 ) -> TransactionReceiptV1 {
     let token_buy_manifest = ManifestBuilder::new()
-        .lock_fee(from_account.address.clone(), dec!("10"))
+        // .lock_fee(from_account.address.clone(), dec!("10"))
         .call_method(
             from_account.address.clone(),
             "withdraw",
@@ -21,7 +21,7 @@ pub fn token_buy(
         })
         .try_deposit_entire_worktop_or_abort(from_account.address, None)
         .build();
-    let receipt = test_runner.execute_manifest(
+    let receipt = test_runner.execute_manifest_ignoring_fee(
         token_buy_manifest,
         vec![NonFungibleGlobalId::from_public_key(&from_account.pubkey)],
     );
@@ -41,7 +41,7 @@ pub fn token_buy_amount(
     test_runner: &mut TestRunnerType,
 ) -> TransactionReceiptV1 {
     let token_buy_manifest = ManifestBuilder::new()
-        .lock_fee(from_account.address.clone(), dec!("10"))
+        // .lock_fee(from_account.address.clone(), dec!("10"))
         .call_method(
             from_account.address.clone(),
             "withdraw",
@@ -53,7 +53,7 @@ pub fn token_buy_amount(
         })
         .try_deposit_entire_worktop_or_abort(from_account.address, None)
         .build();
-    let receipt = test_runner.execute_manifest(
+    let receipt = test_runner.execute_manifest_ignoring_fee(
         token_buy_manifest,
         vec![NonFungibleGlobalId::from_public_key(&from_account.pubkey)],
     );
@@ -73,7 +73,7 @@ pub fn token_sell(
     test_runner: &mut TestRunnerType,
 ) -> TransactionReceiptV1 {
     let token_sell_manifest = ManifestBuilder::new()
-        .lock_fee(from_account.address.clone(), dec!("10"))
+        // .lock_fee(from_account.address.clone(), dec!("10"))
         .call_method(
             from_account.address.clone(),
             "withdraw",
@@ -85,7 +85,7 @@ pub fn token_sell(
         })
         .try_deposit_entire_worktop_or_abort(from_account.address, None)
         .build();
-    let receipt = test_runner.execute_manifest(
+    let receipt = test_runner.execute_manifest_ignoring_fee(
         token_sell_manifest,
         vec![NonFungibleGlobalId::from_public_key(&from_account.pubkey)],
     );
@@ -106,7 +106,7 @@ pub fn token_sell_for_xrd_amount(
     test_runner: &mut TestRunnerType,
 ) -> TransactionReceiptV1 {
     let token_sell_for_xrd_manifest = ManifestBuilder::new()
-        .lock_fee(from_account.address.clone(), dec!("10"))
+        // .lock_fee(from_account.address.clone(), dec!("10"))
         .call_method(
             from_account.address.clone(),
             "withdraw",
@@ -120,7 +120,7 @@ pub fn token_sell_for_xrd_amount(
         )
         .try_deposit_entire_worktop_or_abort(from_account.address, None)
         .build();
-    let receipt = test_runner.execute_manifest(
+    let receipt = test_runner.execute_manifest_ignoring_fee(
         token_sell_for_xrd_manifest,
         vec![NonFungibleGlobalId::from_public_key(&from_account.pubkey)],
     );

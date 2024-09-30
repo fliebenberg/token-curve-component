@@ -354,20 +354,25 @@ mod token_curve {
             let mut result = Decimal::ZERO;
             if new_tokens > Decimal::ZERO {
                 let precise_supply = PreciseDecimal::from(supply.clone());
-                let precise_price: PreciseDecimal = multiplier
-                    .clone()
+                let first_value: PreciseDecimal = multiplier
                     .checked_div(3)
                     .expect("calculate_buy_price problem. Div 3");
-                precise_price.checked_mul(
-                    (precise_supply + new_tokens.clone())
-                        .checked_powi(3)
-                        .expect("calculate_buy_price problem. First Powi(3).")
-                        + precise_supply
-                            .checked_powi(3)
-                            .expect("calculate_buy_price problem. Second Powi(3)."),
-                );
-                result = Decimal::try_from(precise_price)
-                    .expect("calculate_buy_price problem. Cant convert precise decimal to decimal.")
+                let second_value = (precise_supply + new_tokens.clone())
+                    .checked_powi(3)
+                    .expect("calculate_buy_price problem. First Powi(3).");
+                let third_value = precise_supply
+                    .checked_powi(3)
+                    .expect("calculate_buy_price problem. Second Powi(3).");
+                let fourth_value = second_value + third_value;
+                let precise_price = first_value
+                    .checked_mul(fourth_value)
+                    .expect("calculate_buy_price problem. Final Multiply.");
+                result = Decimal::try_from(
+                    precise_price
+                        .checked_round(18, RoundingMode::ToNearestMidpointAwayFromZero)
+                        .expect("calculate_buy_price problem. Cant round precise decimal."),
+                )
+                .expect("calculate_buy_price problem. Cant convert precise decimal to decimal.")
             }
             result
         }
@@ -398,7 +403,12 @@ mod token_curve {
                     .expect("calculate_tokens_received problem. First root");
                 info!("Third value: {}", third_value);
                 let precise_result = third_value - precise_supply;
-                result = Decimal::try_from(precise_result).expect(
+                result = Decimal::try_from(
+                    precise_result
+                        .checked_round(18, RoundingMode::ToNearestMidpointAwayFromZero)
+                        .expect("calculate_tokens_received problem. Cant round precise decimal."),
+                )
+                .expect(
                     "calculate_tokens_received problem. Cant convert precise decimal to decimal.",
                 );
             }
@@ -415,22 +425,30 @@ mod token_curve {
             if sell_tokens > Decimal::ZERO {
                 let precise_supply = PreciseDecimal::from(supply.clone());
                 let precise_new_supply = precise_supply.clone() - sell_tokens.clone();
-                let precise_price: PreciseDecimal = multiplier
+
+                let first_value: PreciseDecimal = multiplier
                     .clone()
                     .checked_div(3)
                     .expect("calculate_buy_price problem. Div 3");
-                precise_price.checked_mul(
-                    (precise_supply.clone())
-                        .checked_powi(3)
-                        .expect("calculate_buy_price problem. First Powi(3).")
-                        - (precise_new_supply.clone())
-                            .checked_powi(3)
-                            .expect("calculate_buy_price problem. Second Powi(3)."),
-                );
-                result = Decimal::try_from(precise_price).expect(
-                    "calculate_buy_price problem. Cant convert precise decimal to decimal.",
-                );
+                let second_value = (precise_supply.clone())
+                    .checked_powi(3)
+                    .expect("calculate_buy_price problem. First Powi(3).");
+                let third_value = (precise_new_supply.clone())
+                    .checked_powi(3)
+                    .expect("calculate_buy_price problem. Second Powi(3).");
+                let fourth_value = second_value - third_value;
+
+                let precise_price = first_value
+                    .checked_mul(fourth_value)
+                    .expect("calculate_sell_price problem. Multiplication problem.");
+                result = Decimal::try_from(
+                    precise_price
+                        .checked_round(18, RoundingMode::ToNearestMidpointAwayFromZero)
+                        .expect("calculate_sell_price problem. Cant round precise decimal."),
+                )
+                .expect("calculate_sell_price problem. Cant convert precise decimal to decimal.");
             }
+            // info!("Sell price: {:?}", result);
             result
         }
 
@@ -465,7 +483,12 @@ mod token_curve {
                 // info!("Fourth value: {:?}", fourth_value);
                 let precise_result = precise_supply - fourth_value;
                 // info!("Precise Result: {:?}", precise_result);
-                result = Decimal::try_from(precise_result).expect(
+                result = Decimal::try_from(
+                    precise_result
+                        .checked_round(18, RoundingMode::ToNearestMidpointAwayFromZero)
+                        .expect("calculate_tokens_to_sell problem. Cant round precise decimal."),
+                )
+                .expect(
                     "calculate_tokens_to_sell problem. Cant convert precise decimal to decimal.",
                 );
             }
