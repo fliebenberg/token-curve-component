@@ -10,7 +10,9 @@ struct OwnerBadgeData {
 #[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
 struct RadixMemeTokenCreateEvent {
     token_address: ResourceAddress,
+    component_address: ComponentAddress,
 }
+
 #[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
 struct RadixMemeTokenTradeEvent {
     token_address: ResourceAddress,
@@ -21,7 +23,7 @@ struct RadixMemeTokenTradeEvent {
 }
 
 #[blueprint]
-#[events(RadixMemeTokenTradeEvent)]
+#[events(RadixMemeTokenCreateEvent, RadixMemeTokenTradeEvent)]
 mod token_curve {
     enable_function_auth! {
         new => AccessRule::AllowAll;
@@ -199,6 +201,10 @@ mod token_curve {
                 }
             })
             .globalize();
+            Runtime::emit_event(RadixMemeTokenCreateEvent {
+                token_address: token_manager.address(),
+                component_address: component_address.clone(),
+            });
             (new_token_curve, owner_badge, component_address)
         }
 

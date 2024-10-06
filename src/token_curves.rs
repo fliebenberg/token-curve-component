@@ -1,6 +1,12 @@
 use crate::token_curve::token_curve::{TokenCurve, TokenCurveFunctions};
 use scrypto::prelude::*;
 
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
+struct RadixMemeChangeDefaultEvent {
+    field_name: String,
+    old_value: String,
+    new_value: String,
+}
 #[blueprint]
 mod token_curves {
     enable_function_auth! {
@@ -113,32 +119,46 @@ mod token_curves {
         }
 
         fn change_default_parameter(&mut self, param_name: String, param_value: String) {
+            let old_value: String;
+            let new_value = param_value.clone();
             match param_name.as_str() {
                 "max_token_supply" => {
-                    self.max_token_supply = Decimal::try_from(param_value)
-                        .expect("Could not convert parameter value for max_token_supply to Decimal")
+                    old_value = self.max_token_supply.to_string();
+                    self.max_token_supply = Decimal::try_from(param_value).expect(
+                        "Could not convert parameter value for max_token_supply to Decimal",
+                    );
                 }
-                "max_token_supply_to_trade" => self.max_token_supply_to_trade = Decimal::try_from(
-                    param_value,
-                )
-                .expect(
-                    "Could not convert parameter value for max_token_supply_to_trade to Decimal",
-                ),
+                "max_token_supply_to_trade" => {
+                    old_value = self.max_token_supply_to_trade.to_string();
+                    self.max_token_supply_to_trade = Decimal::try_from(
+                        param_value,
+                    ).expect(
+                        "Could not convert parameter value for max_token_supply_to_trade to Decimal",
+                    );
+                }
                 "max_xrd_market_cap" => {
+                    old_value = self.max_xrd_market_cap.to_string();
                     self.max_xrd_market_cap = Decimal::try_from(param_value).expect(
                         "Could not convert parameter value for max_xrd_market_cap to Decimal",
                     )
                 }
                 "tx_fee_perc" => {
+                    old_value = self.tx_fee_perc.to_string();
                     self.tx_fee_perc = Decimal::try_from(param_value)
                         .expect("Could not convert parameter value for tx_fee_perc to Decimal")
                 }
                 "listing_fee_perc" => {
+                    old_value = self.listing_fee_perc.to_string();
                     self.listing_fee_perc = Decimal::try_from(param_value)
                         .expect("Could not convert parameter value for listing_fee_perc to Decimal")
                 }
                 _ => panic!("Could not match parameter name"),
             };
+            Runtime::emit_event(RadixMemeChangeDefaultEvent {
+                field_name: param_name.clone(),
+                old_value,
+                new_value,
+            });
         }
     }
 }
