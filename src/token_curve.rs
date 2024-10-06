@@ -32,12 +32,15 @@ mod token_curve {
         pub owner_badge_address: ResourceAddress, // the address of the owner badge for this token and component
         pub dapp_def_address: GlobalAddress,      // the dapp def account address for this component
         pub token_manager: ResourceManager, // the resource manager for the token created as part of this component
-        pub max_supply: Decimal, // the maximum supply of the token that can be created/traded through this component
-        pub max_xrd: Decimal,    // the maximum XRD that will be received into this component
+        pub max_token_supply: Decimal, // the maximum supply of the token that will be available after it is listed on a dex
+        pub max_token_supply_to_trade: Decimal, // the maximum supply of the token that can be traded on the bonding curve
+        pub max_xrd_market_cap: Decimal, // the maximum market cap in XRD that will be reached when the max tokens have been traded on bonding curve
+        pub max_xrd: Decimal, // the maximum XRD that will be received into this component
         pub multiplier: PreciseDecimal, // the constant multiplier that is used in the bonding curve calcs. This is based on the max_supply and max_xrd values.
         pub xrd_vault: Vault,           // the vault that holds all the XRD recived by the component
         pub last_price: Decimal,        // the price reached with the last trade on the component
         pub current_supply: Decimal, // the current supply of the token associated with this component
+        pub time_created: i64, // the date the token curve was created in seconds since unix epoch - included for easy lookup
     }
 
     impl TokenCurve {
@@ -52,9 +55,9 @@ mod token_curve {
             telegram: String,
             x: String,
             website: String,
-            max_supply: Decimal,
-            max_xrd: Decimal,
-            multiplier: PreciseDecimal,
+            max_token_supply: Decimal,
+            max_token_supply_to_trade: Decimal,
+            max_xrd_market_cap: Decimal,
             parent_address: ComponentAddress,
         ) -> (Global<TokenCurve>, NonFungibleBucket, ComponentAddress) {
             let _parent_instance = Global::<TokenCurves>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
@@ -135,6 +138,15 @@ mod token_curve {
             dapp_def_account.set_owner_role(rule!(require(owner_badge.resource_address())));
             let dapp_def_address = GlobalAddress::from(dapp_def_account.address());
 
+            let multiplier = TokenCurve::calculate_multiplier(
+                max_xrd_market_cap.clone(),
+                max_token_supply_to_trade.clone(),
+            );
+            let max_xrd = TokenCurve::calculate_max_xrd(
+                multiplier.clone(),
+                max_token_supply_to_trade.clone(),
+            );
+
             let new_token_curve = TokenCurve {
                 parent_address,
                 address: component_address.clone(),
@@ -142,11 +154,14 @@ mod token_curve {
                 dapp_def_address,
                 token_manager,
                 current_supply: Decimal::ZERO,
-                max_supply,
+                max_token_supply,
+                max_token_supply_to_trade,
+                max_xrd_market_cap,
                 max_xrd,
                 multiplier,
                 xrd_vault: Vault::new(XRD),
                 last_price: Decimal::ZERO,
+                time_created: Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(
@@ -155,7 +170,7 @@ mod token_curve {
             .with_address(address_reservation)
             .metadata(metadata! {
                 init {
-                    "name" => format!("Binding Curve for {}", symbol.clone()), updatable;
+                    "name" => format!("Bonding Curve for {}", symbol.clone()), updatable;
                     "description" => format!("Radix Meme Token Bonding Curve component for token {} ({})", name.clone(), symbol.clone()), updatable;
                     "info_url" => Url::of(String::from("https://radix.meme")), updatable;
                     "tags" => vec!["Meme","Token", "Curve"], updatable;
@@ -175,9 +190,11 @@ mod token_curve {
                 "Can only buy tokens with XRD"
             );
             let mut xrd_amount = in_bucket.amount();
+            info!("Max xrd: {}", self.max_xrd);
             if self.xrd_vault.amount() + xrd_amount > self.max_xrd {
                 xrd_amount = self.max_xrd - self.xrd_vault.amount();
             }
+            info!("XRD Amount: {}", xrd_amount);
             let mut out_bucket = Bucket::new(self.token_manager.address());
             if xrd_amount > Decimal::ZERO {
                 let receive_tokens = TokenCurve::calculate_tokens_received(
@@ -185,7 +202,7 @@ mod token_curve {
                     self.current_supply.clone(),
                     self.multiplier.clone(),
                 );
-                if receive_tokens + self.current_supply > self.max_supply {
+                if receive_tokens + self.current_supply > self.max_token_supply_to_trade {
                     panic!("Unexpected error! Not enough tokens remaining for tx.")
                 }
                 out_bucket.put(self.token_manager.mint(receive_tokens.clone()));
@@ -213,7 +230,7 @@ mod token_curve {
                 "Can only buy tokens with XRD"
             );
             assert!(
-                amount + self.current_supply <= self.max_supply,
+                amount + self.current_supply <= self.max_token_supply_to_trade,
                 "Cannot buy requested amount of tokens. Not enough supply left"
             );
             let mut out_bucket = Bucket::new(self.token_manager.address());
@@ -385,8 +402,11 @@ mod token_curve {
         ) -> Decimal {
             let mut result = Decimal::ZERO;
             if xrd_received > Decimal::ZERO {
+                info!("Miltiplier: {}", multiplier);
                 let precise_xrd_received = PreciseDecimal::from(xrd_received.clone());
+                info!("XRD Received: {}", precise_xrd_received);
                 let precise_supply = PreciseDecimal::from(supply.clone());
+                info!("Supply: {}", precise_supply);
                 let mut first_value = precise_xrd_received
                     .checked_div(multiplier.clone())
                     .expect("calculate_tokens_received problem. First div");
@@ -403,6 +423,7 @@ mod token_curve {
                     .expect("calculate_tokens_received problem. First root");
                 info!("Third value: {}", third_value);
                 let precise_result = third_value - precise_supply;
+                info!("Result: {}", precise_result);
                 result = Decimal::try_from(
                     precise_result
                         .checked_round(18, RoundingMode::ToNearestMidpointAwayFromZero)
@@ -461,28 +482,29 @@ mod token_curve {
             let mut result = Decimal::ZERO;
             if xrd_required > Decimal::ZERO {
                 let precise_xrd_required = PreciseDecimal::from(xrd_required.clone());
-                // info!("Precise XRD required: {:?}", precise_xrd_required);
+                info!("Precise XRD required: {:?}", precise_xrd_required);
                 let precise_supply = PreciseDecimal::from(supply.clone());
-                // info!("Precise supply: {:?}", precise_supply);
-                let mut first_value = precise_xrd_required
-                    .checked_div(multiplier.clone())
-                    .expect("calculate_tokens_to_sell problem. First div");
-                first_value = first_value
+                info!("Precise supply: {:?}", precise_supply);
+                let mut first_value: PreciseDecimal = precise_xrd_required
                     .checked_mul(3)
                     .expect("calculate_tokens_to_sell problem. First mul");
-                // info!("First value: {:?}", first_value);
+                info!("First value: {}", first_value);
+                first_value = first_value
+                    .checked_div(multiplier.clone())
+                    .expect("calculate_tokens_to_sell problem. First div");
+                info!("First value: {}", first_value);
                 let second_value = precise_supply
                     .checked_powi(3)
                     .expect("calculate_tokens_to_sell problem. First powi");
-                // info!("Second value: {:?}", second_value);
+                info!("Second value: {:?}", second_value);
                 let third_value = second_value - first_value;
-                // info!("Third value: {:?}", third_value);
+                info!("Third value: {:?}", third_value);
                 let fourth_value = third_value
                     .checked_nth_root(3)
                     .expect("calculate_tokens_to_sell problem. First root");
-                // info!("Fourth value: {:?}", fourth_value);
+                info!("Fourth value: {:?}", fourth_value);
                 let precise_result = precise_supply - fourth_value;
-                // info!("Precise Result: {:?}", precise_result);
+                info!("Precise Result: {:?}", precise_result);
                 result = Decimal::try_from(
                     precise_result
                         .checked_round(18, RoundingMode::ToNearestMidpointAwayFromZero)
@@ -493,6 +515,37 @@ mod token_curve {
                 );
             }
             result
+        }
+
+        fn calculate_multiplier(
+            max_xrd_market_cap: Decimal,
+            max_token_supply_to_trade: Decimal,
+        ) -> PreciseDecimal {
+            let divisor = PreciseDecimal::from(max_token_supply_to_trade)
+                .checked_powi(3)
+                .expect("Problem in calculating multiplier. powi(3)");
+            let multiplier = PreciseDecimal::from(max_xrd_market_cap)
+                .checked_div(divisor)
+                .expect("Problem in calculating multiplier. First div");
+            multiplier
+        }
+
+        fn calculate_max_xrd(
+            multiplier: PreciseDecimal,
+            max_token_supply_to_trade: Decimal,
+        ) -> Decimal {
+            let first_value: PreciseDecimal = multiplier
+                .checked_div(3)
+                .expect("Problem in calculating max_xrd. First div");
+            let precise_max_supply = PreciseDecimal::from(max_token_supply_to_trade);
+            let second_value: PreciseDecimal = precise_max_supply
+                .checked_powi(3)
+                .expect("Problem in calculating max_xrd. First powi");
+            let precise_max_xrd: PreciseDecimal = first_value
+                .checked_mul(second_value)
+                .expect("Problem calculating max_xrd. First mul");
+            Decimal::try_from(precise_max_xrd)
+                .expect("Problem calculating max_xrd. Could not convert precise_max_xrd to decimal")
         }
     }
 }

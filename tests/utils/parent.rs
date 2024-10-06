@@ -6,7 +6,8 @@ use super::*;
 pub fn create_parent_component(
     owner_badge_address: &ResourceAddress,
     max_token_supply: Decimal,
-    max_xrd: Decimal,
+    max_token_supply_to_trade: Decimal,
+    max_xrd_market_cap: Decimal,
     account: &AccInfo,
     test_runner: &mut TestRunnerType,
 ) -> (ComponentAddress, ComponentAddress) {
@@ -18,10 +19,11 @@ pub fn create_parent_component(
             "new",
             manifest_args![
                 "Radix Meme Tokens Component",
-                "The main com-onent for the Radix Meme Token Creator",
+                "The main component for the Radix Meme Token Creator",
                 "https://radix.meme",
                 max_token_supply,
-                max_xrd,
+                max_token_supply_to_trade,
+                max_xrd_market_cap,
                 owner_badge_address,
             ],
         )

@@ -10,9 +10,9 @@ mod token_curves {
     struct TokenCurves {
         pub address: ComponentAddress,
         pub owner_badge_manager: ResourceManager,
-        pub max_token_supply: Decimal, // the maximum token supply available for trading on the bonding curve
-        pub max_xrd: Decimal, // the maximum xrd that will be needed to get to the maximum token supply
-        pub multiplier: PreciseDecimal, // a constant used in the bonding curve calcs that is determined by the max_token_supply and max_xrd values
+        pub max_token_supply: Decimal, // the maximum token supply after listing on external dex
+        pub max_token_supply_to_trade: Decimal, // the maximum token supply available for trading on the bonding curve
+        pub max_xrd_market_cap: Decimal, // the maximum market cap in XRD that will be reached when the max tokens have been traded on the bonding curve
         pub tokens: KeyValueStore<ComponentAddress, bool>, // a simple list of the tokens launched and whether they are still active
     }
 
@@ -24,17 +24,18 @@ mod token_curves {
             description: String,
             info_url: String,
             max_token_supply: Decimal,
-            max_xrd: Decimal,
+            max_token_supply_to_trade: Decimal,
+            max_xrd_market_cap: Decimal,
             owner_badge_address: ResourceAddress,
         ) -> Global<TokenCurves> {
             let (address_reservation, component_address) =
                 Runtime::allocate_component_address(<TokenCurves>::blueprint_id());
-            let divisor = PreciseDecimal::from(max_token_supply)
-                .checked_powi(3)
-                .expect("Problem in calculating multiplier. powi(3)");
-            let multiplier = PreciseDecimal::from(max_xrd)
-                .checked_div(divisor)
-                .expect("Problem in calculating multiplier. First div");
+            // let divisor = PreciseDecimal::from(max_token_supply_to_trade)
+            //     .checked_powi(3)
+            //     .expect("Problem in calculating multiplier. powi(3)");
+            // let multiplier = PreciseDecimal::from(max_xrd)
+            //     .checked_div(divisor)
+            //     .expect("Problem in calculating multiplier. First div");
 
             let dapp_def_account =
                 Blueprint::<Account>::create_advanced(OwnerRole::Updatable(rule!(allow_all)), None); // will reset owner role after dapp def metadata has been set
@@ -53,8 +54,8 @@ mod token_curves {
                 address: component_address,
                 owner_badge_manager: ResourceManager::from_address(owner_badge_address.clone()),
                 max_token_supply,
-                max_xrd,
-                multiplier,
+                max_token_supply_to_trade,
+                max_xrd_market_cap,
                 tokens: KeyValueStore::new(),
             }
             .instantiate()
@@ -96,12 +97,39 @@ mod token_curves {
                 x,
                 website,
                 self.max_token_supply.clone(),
-                self.max_xrd.clone(),
-                self.multiplier.clone(),
+                self.max_token_supply_to_trade.clone(),
+                self.max_xrd_market_cap.clone(),
                 self.address.clone(),
             );
             self.tokens.insert(component_address.clone(), true);
             (new_instance, owner_badge)
+        }
+
+        pub fn change_default_parameters(&mut self, param_values: Vec<(String, String)>) {
+            for (param_name, param_value) in param_values {
+                self.change_default_parameter(param_name, param_value);
+            }
+        }
+
+        fn change_default_parameter(&mut self, param_name: String, param_value: String) {
+            match param_name.as_str() {
+                "max_token_supply" => {
+                    self.max_token_supply = Decimal::try_from(param_value)
+                        .expect("Could not convert parameter value for max_token_supply to Decimal")
+                }
+                "max_token_supply_to_trade" => self.max_token_supply_to_trade = Decimal::try_from(
+                    param_value,
+                )
+                .expect(
+                    "Could not convert parameter value for max_token_supply_to_trade to Decimal",
+                ),
+                "max_xrd_market_cap" => {
+                    self.max_xrd_market_cap = Decimal::try_from(param_value).expect(
+                        "Could not convert parameter value for max_xrd_market_cap to Decimal",
+                    )
+                }
+                _ => panic!("Could not match parameter name"),
+            };
         }
     }
 }

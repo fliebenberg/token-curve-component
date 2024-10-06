@@ -31,6 +31,7 @@ pub fn setup_test_env() -> TestEnv {
         &owner_badge_address,
         dec!("1000000"),
         dec!("1000000"),
+        dec!("1000000"),
         &owner_account,
         &mut test_runner,
     );
@@ -60,6 +61,22 @@ pub fn setup_test_env() -> TestEnv {
 pub fn create_new_account(test_runner: &mut TestRunnerType) -> AccInfo {
     let (pubkey, _, address) = test_runner.new_allocated_account();
     AccInfo { address, pubkey }
+}
+
+pub fn load_account_with_xrd(account: &AccInfo, amount: Decimal, test_runner: &mut TestRunnerType) {
+    const FREE_AMOUNT: Decimal = dec!("10000");
+    let mut allocated_amount = Decimal::ZERO;
+    while allocated_amount < amount {
+        let txmanifest = ManifestBuilder::new()
+            .get_free_xrd_from_faucet()
+            .deposit_batch(account.address)
+            .build();
+        let _receipt = test_runner.execute_manifest_ignoring_fee(
+            txmanifest,
+            vec![NonFungibleGlobalId::from_public_key(&account.pubkey)],
+        );
+        allocated_amount += FREE_AMOUNT;
+    }
 }
 
 pub fn get_component_state<T: ScryptoDecode, E: NativeVmExtension, D: TestDatabase>(

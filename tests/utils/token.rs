@@ -67,8 +67,16 @@ pub fn get_token_state_list(
     let token_state = get_token_state(token_component, test_runner);
     let mut result: Vec<(String, String)> = vec![];
     result.push((
-        String::from("max_supply"),
-        format!("{:?}", token_state.max_supply),
+        String::from("max_token_supply"),
+        format!("{:?}", token_state.max_token_supply),
+    ));
+    result.push((
+        String::from("max_token_supply_to_trade"),
+        format!("{:?}", token_state.max_token_supply_to_trade),
+    ));
+    result.push((
+        String::from("max_xrd_market_cap"),
+        format!("{:?}", token_state.max_xrd_market_cap),
     ));
     result.push((
         String::from("max_xrd"),
