@@ -14,6 +14,8 @@ mod token_curves {
         pub max_token_supply_to_trade: Decimal, // the maximum token supply available for trading on the bonding curve
         pub max_xrd_market_cap: Decimal, // the maximum market cap in XRD that will be reached when the max tokens have been traded on the bonding curve
         pub tokens: KeyValueStore<ComponentAddress, bool>, // a simple list of the tokens launched and whether they are still active
+        pub tx_fee_perc: Decimal, // fee % taken on every tx, specified in decimals 1% = 0.01
+        pub listing_fee_perc: Decimal, // fee % taken when a token is listed on external dex, specified in decimals 1% = 0.01
     }
 
     impl TokenCurves {
@@ -26,17 +28,12 @@ mod token_curves {
             max_token_supply: Decimal,
             max_token_supply_to_trade: Decimal,
             max_xrd_market_cap: Decimal,
+            tx_fee_perc: Decimal,
+            listing_fee_perc: Decimal,
             owner_badge_address: ResourceAddress,
         ) -> Global<TokenCurves> {
             let (address_reservation, component_address) =
                 Runtime::allocate_component_address(<TokenCurves>::blueprint_id());
-            // let divisor = PreciseDecimal::from(max_token_supply_to_trade)
-            //     .checked_powi(3)
-            //     .expect("Problem in calculating multiplier. powi(3)");
-            // let multiplier = PreciseDecimal::from(max_xrd)
-            //     .checked_div(divisor)
-            //     .expect("Problem in calculating multiplier. First div");
-
             let dapp_def_account =
                 Blueprint::<Account>::create_advanced(OwnerRole::Updatable(rule!(allow_all)), None); // will reset owner role after dapp def metadata has been set
             dapp_def_account.set_metadata("account_type", String::from("dapp definition"));
@@ -56,6 +53,8 @@ mod token_curves {
                 max_token_supply,
                 max_token_supply_to_trade,
                 max_xrd_market_cap,
+                tx_fee_perc,
+                listing_fee_perc,
                 tokens: KeyValueStore::new(),
             }
             .instantiate()
@@ -99,6 +98,8 @@ mod token_curves {
                 self.max_token_supply.clone(),
                 self.max_token_supply_to_trade.clone(),
                 self.max_xrd_market_cap.clone(),
+                self.tx_fee_perc.clone(),
+                self.listing_fee_perc.clone(),
                 self.address.clone(),
             );
             self.tokens.insert(component_address.clone(), true);
@@ -127,6 +128,14 @@ mod token_curves {
                     self.max_xrd_market_cap = Decimal::try_from(param_value).expect(
                         "Could not convert parameter value for max_xrd_market_cap to Decimal",
                     )
+                }
+                "tx_fee_perc" => {
+                    self.tx_fee_perc = Decimal::try_from(param_value)
+                        .expect("Could not convert parameter value for tx_fee_perc to Decimal")
+                }
+                "listing_fee_perc" => {
+                    self.listing_fee_perc = Decimal::try_from(param_value)
+                        .expect("Could not convert parameter value for listing_fee_perc to Decimal")
                 }
                 _ => panic!("Could not match parameter name"),
             };

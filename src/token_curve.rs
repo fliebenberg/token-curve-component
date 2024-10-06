@@ -36,8 +36,11 @@ mod token_curve {
         pub max_token_supply_to_trade: Decimal, // the maximum supply of the token that can be traded on the bonding curve
         pub max_xrd_market_cap: Decimal, // the maximum market cap in XRD that will be reached when the max tokens have been traded on bonding curve
         pub max_xrd: Decimal, // the maximum XRD that will be received into this component
+        pub tx_fee_perc: Decimal, // fee % taken on every tx, specified in decimals 1% = 0.01,
+        pub listing_fee_perc: Decimal, // fee % taken when a token is listed on external dex, specified in decimals 1% = 0.01
         pub multiplier: PreciseDecimal, // the constant multiplier that is used in the bonding curve calcs. This is based on the max_supply and max_xrd values.
         pub xrd_vault: Vault,           // the vault that holds all the XRD recived by the component
+        pub fee_vault: Vault,           // vault that holds all the fees earned by the component
         pub last_price: Decimal,        // the price reached with the last trade on the component
         pub current_supply: Decimal, // the current supply of the token associated with this component
         pub time_created: i64, // the date the token curve was created in seconds since unix epoch - included for easy lookup
@@ -58,8 +61,13 @@ mod token_curve {
             max_token_supply: Decimal,
             max_token_supply_to_trade: Decimal,
             max_xrd_market_cap: Decimal,
+            tx_fee_perc: Decimal,
+            listing_fee_perc: Decimal,
             parent_address: ComponentAddress,
         ) -> (Global<TokenCurve>, NonFungibleBucket, ComponentAddress) {
+            assert!(tx_fee_perc < Decimal::ONE, "tx_fee_perc cannot be >= 1. tx_fee_perc is specified in decimals, e.g. 1% = 0.01. ");
+            assert!(listing_fee_perc < Decimal::ONE, "listing_fee_perc cannot be >= 1. listing_fee_perc is specified in decimals, e.g. 1% = 0.01. ");
+
             let _parent_instance = Global::<TokenCurves>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
                                                                                         // let require_parent = rule!(require(global_caller(parent_address.clone())));
             let (address_reservation, component_address) =
@@ -158,8 +166,11 @@ mod token_curve {
                 max_token_supply_to_trade,
                 max_xrd_market_cap,
                 max_xrd,
+                tx_fee_perc,
+                listing_fee_perc,
                 multiplier,
                 xrd_vault: Vault::new(XRD),
+                fee_vault: Vault::new(XRD),
                 last_price: Decimal::ZERO,
                 time_created: Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch
             }
@@ -181,7 +192,7 @@ mod token_curve {
             (new_token_curve, owner_badge, component_address)
         }
 
-        // function to buy tokens form the bonding curve using the sent XRD
+        // function to buy tokens from the bonding curve using the sent XRD
         // function takes a bucket with XRD to use to buy new tokens
         // function returns a bucket with the bought tokens as well as a bucket with any remaining XRD (if any)
         pub fn buy(&mut self, mut in_bucket: Bucket) -> (Bucket, Bucket) {
@@ -190,11 +201,22 @@ mod token_curve {
                 "Can only buy tokens with XRD"
             );
             let mut xrd_amount = in_bucket.amount();
+            info!("XRD amount before fees: {}", xrd_amount);
             info!("Max xrd: {}", self.max_xrd);
-            if self.xrd_vault.amount() + xrd_amount > self.max_xrd {
-                xrd_amount = self.max_xrd - self.xrd_vault.amount();
-            }
-            info!("XRD Amount: {}", xrd_amount);
+            let available_xrd = self.max_xrd - self.xrd_vault.amount();
+            let mut fee_amount = xrd_amount * self.tx_fee_perc;
+            if xrd_amount > available_xrd {
+                // calculate fee based on available xrd only
+                fee_amount = available_xrd * self.tx_fee_perc;
+                xrd_amount = xrd_amount - fee_amount;
+                if xrd_amount > available_xrd {
+                    xrd_amount = available_xrd;
+                }
+            } else {
+                xrd_amount = xrd_amount - fee_amount;
+            };
+            self.fee_vault.put(in_bucket.take(fee_amount));
+            info!("XRD Amount after fees: {}", xrd_amount);
             let mut out_bucket = Bucket::new(self.token_manager.address());
             if xrd_amount > Decimal::ZERO {
                 let receive_tokens = TokenCurve::calculate_tokens_received(
@@ -240,12 +262,14 @@ mod token_curve {
                     self.current_supply.clone(),
                     self.multiplier.clone(),
                 );
-                if xrd_required > in_bucket.amount() {
+                let fee_amount = xrd_required * self.tx_fee_perc;
+                if xrd_required + fee_amount > in_bucket.amount() {
                     panic!("Not enough XRD sent for tx.");
                 }
                 if xrd_required + self.xrd_vault.amount() > self.max_xrd {
                     panic!("Unexpected error! Max XRD will be exceeded in tx.")
                 }
+                self.fee_vault.put(in_bucket.take(fee_amount));
                 out_bucket.put(self.token_manager.mint(amount.clone()));
                 self.current_supply = self.current_supply + amount;
                 self.xrd_vault.put(in_bucket.take(xrd_required));
@@ -255,7 +279,7 @@ mod token_curve {
                     token_address: self.token_manager.address(),
                     side: String::from("buy"),
                     token_amount: out_bucket.amount(),
-                    xrd_amount: xrd_required.clone(),
+                    xrd_amount: xrd_required.clone() + fee_amount.clone(),
                     end_price: self.last_price.clone(),
                 });
             }
@@ -276,7 +300,7 @@ mod token_curve {
             }
             let mut out_bucket = Bucket::new(XRD);
             if token_amount > Decimal::ZERO {
-                let receive_xrd = TokenCurve::calculate_sell_price(
+                let mut receive_xrd = TokenCurve::calculate_sell_price(
                     token_amount.clone(),
                     self.current_supply.clone(),
                     self.multiplier.clone(),
@@ -284,6 +308,9 @@ mod token_curve {
                 if receive_xrd > self.xrd_vault.amount() {
                     panic!("Unexpected error! Not enough XRD in component for sell tx.")
                 }
+                let fee_amount = receive_xrd * self.tx_fee_perc;
+                self.fee_vault.put(self.xrd_vault.take(fee_amount));
+                receive_xrd = receive_xrd - fee_amount;
                 let burn_bucket = in_bucket.take(token_amount);
                 burn_bucket.burn();
                 self.current_supply = self.current_supply - token_amount.clone();
@@ -313,14 +340,16 @@ mod token_curve {
                 in_bucket.resource_address() == self.token_manager.address(),
                 "Wrong tokens sent in bucket"
             );
-            if amount > self.xrd_vault.amount() {
-                panic!("Not enough XRD in vault for requested amount.");
+            let fee_amount = amount * self.tx_fee_perc;
+            if amount + fee_amount > self.xrd_vault.amount() {
+                panic!("Not enough XRD in component vault for requested amount.");
             }
+            self.fee_vault.put(self.xrd_vault.take(fee_amount));
             let mut out_bucket = Bucket::new(XRD);
             info!("In bucket amount: {:?}", in_bucket.amount());
             if amount > Decimal::ZERO {
                 let tokens_to_sell = TokenCurve::calculate_tokens_to_sell(
-                    amount.clone(),
+                    amount.clone() + fee_amount.clone(),
                     self.current_supply.clone(),
                     self.multiplier.clone(),
                 );
