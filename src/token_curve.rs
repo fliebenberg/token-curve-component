@@ -55,9 +55,9 @@ mod token_curve {
             symbol: String,
             description: String,
             icon_url: String,
-            telegram: String,
-            x: String,
-            website: String,
+            telegram_url: String,
+            x_url: String,
+            website_url: String,
             max_token_supply: Decimal,
             max_token_supply_to_trade: Decimal,
             max_xrd_market_cap: Decimal,
@@ -67,7 +67,6 @@ mod token_curve {
         ) -> (Global<TokenCurve>, NonFungibleBucket, ComponentAddress) {
             assert!(tx_fee_perc < Decimal::ONE, "tx_fee_perc cannot be >= 1. tx_fee_perc is specified in decimals, e.g. 1% = 0.01. ");
             assert!(listing_fee_perc < Decimal::ONE, "listing_fee_perc cannot be >= 1. listing_fee_perc is specified in decimals, e.g. 1% = 0.01. ");
-
             let _parent_instance = Global::<TokenCurves>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
                                                                                         // let require_parent = rule!(require(global_caller(parent_address.clone())));
             let (address_reservation, component_address) =
@@ -87,7 +86,7 @@ mod token_curve {
             })
             .metadata(metadata!(
                 init {
-                    "name" => format!("{} owner badge.", name.clone()), updatable;
+                    "name" => format!("{} owner badge.", symbol.clone()), updatable;
                     "symbol" => format!("{}", symbol.clone()), updatable;
                     "icon_url" => Url::of(icon_url.clone()), updatable;
                     "radix_meme_component" => format!("{:?}", component_address.clone()), locked;
@@ -101,6 +100,17 @@ mod token_curve {
             owner_badge_manager.set_mintable(rule!(require(owner_badge.resource_address()))); // any owner badge holder can mint more owner badges
             owner_badge_manager.lock_mintable();
             owner_badge_manager.set_owner_role(rule!(require(owner_badge.resource_address()))); // set owner role to be anyone with an owner badge
+
+            let mut social_urls_vec: Vec<Url> = vec![];
+            if telegram_url.len() > 0 {
+                social_urls_vec.push(Url::of(telegram_url.clone()));
+            }
+            if x_url.len() > 0 {
+                social_urls_vec.push(Url::of(x_url));
+            }
+            if website_url.len() > 0 {
+                social_urls_vec.push(Url::of(website_url));
+            }
 
             let token_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(
                 require(owner_badge.resource_address())
@@ -118,12 +128,11 @@ mod token_curve {
                 init {
                     "name" => name.clone(), updatable;
                     "symbol" => symbol.clone(), updatable;
-                    "description" => description.clone(), updatable;
+                    "description" => format!("{} Token created on Radix.meme.", description), updatable;
                     "icon_url" => Url::of(icon_url.clone()), updatable;
-                    "telegram" => telegram.clone(), updatable;
-                    "x" => x.clone(), updatable;
-                    "website" => website.clone(), updatable;
+                    "social_urls" => social_urls_vec.clone(), updatable;
                     "tags" => "RadixMemeToken", updatable;
+                    "radix_meme_component" => format!("{:?}", component_address.clone()), updatable;
                 }
             ))
             .create_with_no_initial_supply();
@@ -181,10 +190,11 @@ mod token_curve {
             .with_address(address_reservation)
             .metadata(metadata! {
                 init {
-                    "name" => format!("Bonding Curve for {}", symbol.clone()), updatable;
+                    "name" => format!("Radix.meme: {}", symbol.clone()), updatable;
                     "description" => format!("Radix Meme Token Bonding Curve component for token {} ({})", name.clone(), symbol.clone()), updatable;
                     "info_url" => Url::of(String::from("https://radix.meme")), updatable;
-                    "tags" => vec!["Meme","Token", "Curve"], updatable;
+                    "social_urls" => social_urls_vec.clone(), updatable;
+                    "tags" => vec!["RadixMeme"], updatable;
                     "dapp_definition" => dapp_def_address.clone(), updatable;
                 }
             })
