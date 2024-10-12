@@ -1,4 +1,4 @@
-use meme_token::token_curve::token_curve::TokenCurve;
+use meme_token::radix_meme_token_curve::radix_meme_token_curve::RadixMemeTokenCurve;
 use scrypto_test::prelude::*;
 
 use super::*;
@@ -52,11 +52,12 @@ pub fn get_token_data(token_address: ResourceAddress, test_runner: &mut TestRunn
 pub fn get_token_state(
     token_component: &ComponentAddress,
     test_runner: &mut TestRunnerType,
-) -> TokenCurve {
-    let token_state = get_component_state::<TokenCurve, NoExtension, InMemorySubstateDatabase>(
-        token_component.clone(),
-        test_runner,
-    );
+) -> RadixMemeTokenCurve {
+    let token_state = get_component_state::<
+        RadixMemeTokenCurve,
+        NoExtension,
+        InMemorySubstateDatabase,
+    >(token_component.clone(), test_runner);
     token_state
 }
 

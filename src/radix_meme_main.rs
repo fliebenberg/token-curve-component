@@ -1,4 +1,6 @@
-use crate::token_curve::token_curve::{TokenCurve, TokenCurveFunctions};
+use crate::radix_meme_token_curve::radix_meme_token_curve::{
+    RadixMemeTokenCurve, RadixMemeTokenCurveFunctions,
+};
 use scrypto::prelude::*;
 
 #[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
@@ -8,12 +10,26 @@ struct RadixMemeChangeDefaultEvent {
     new_value: String,
 }
 #[blueprint]
-mod token_curves {
+mod radix_meme_main {
     enable_function_auth! {
         new => AccessRule::AllowAll;
     }
 
-    struct TokenCurves {
+    enable_method_auth! {
+        roles {
+            admin => updatable_by: [OWNER];
+            owner => updatable_by: [OWNER];
+        },
+        methods {
+            new_token_curve_simple => PUBLIC;
+            change_default_parameters => restrict_to: [admin];
+            claim_fee_amount => restrict_to: [owner];
+            claim_all_fees => restrict_to:[owner];
+            transfer_fees => PUBLIC;
+        }
+    }
+
+    struct RadixMemeMain {
         pub address: ComponentAddress,
         pub owner_badge_manager: ResourceManager,
         pub max_token_supply: Decimal, // the maximum token supply after listing on external dex
@@ -21,10 +37,12 @@ mod token_curves {
         pub max_xrd_market_cap: Decimal, // the maximum market cap in XRD that will be reached when the max tokens have been traded on the bonding curve
         pub tokens: KeyValueStore<ComponentAddress, bool>, // a simple list of the tokens launched and whether they are still active
         pub tx_fee_perc: Decimal, // fee % taken on every tx, specified in decimals 1% = 0.01
-        pub listing_fee_perc: Decimal, // fee % taken when a token is listed on external dex, specified in decimals 1% = 0.01
+        pub listing_fee_perc: Decimal, // fee % paid to redix.meme when a token is listed on a dex, specified in decimals 1% = 0.01
+        pub creator_fee_perc: Decimal, // fee % paid to the token creator when a token is listed on a dex, specified in decimals 1% = 0.01
+        pub fees_vault: Vault,         // vault to hold fees
     }
 
-    impl TokenCurves {
+    impl RadixMemeMain {
         // function to create a new TokenCurves (parent) instance. This instance will be used to launch and keep track of the individual token curve components
         // takes in the resource address to be used as owner badge and other values needed to create the parent component.
         pub fn new(
@@ -36,10 +54,11 @@ mod token_curves {
             max_xrd_market_cap: Decimal,
             tx_fee_perc: Decimal,
             listing_fee_perc: Decimal,
+            creator_fee_perc: Decimal,
             owner_badge_address: ResourceAddress,
-        ) -> Global<TokenCurves> {
+        ) -> Global<RadixMemeMain> {
             let (address_reservation, component_address) =
-                Runtime::allocate_component_address(<TokenCurves>::blueprint_id());
+                Runtime::allocate_component_address(<RadixMemeMain>::blueprint_id());
             let dapp_def_account =
                 Blueprint::<Account>::create_advanced(OwnerRole::Updatable(rule!(allow_all)), None); // will reset owner role after dapp def metadata has been set
             dapp_def_account.set_metadata("account_type", String::from("dapp definition"));
@@ -53,7 +72,7 @@ mod token_curves {
             dapp_def_account.set_owner_role(rule!(require(owner_badge_address)));
             let dapp_def_address = GlobalAddress::from(dapp_def_account.address());
 
-            TokenCurves {
+            RadixMemeMain {
                 address: component_address,
                 owner_badge_manager: ResourceManager::from_address(owner_badge_address.clone()),
                 max_token_supply,
@@ -61,7 +80,9 @@ mod token_curves {
                 max_xrd_market_cap,
                 tx_fee_perc,
                 listing_fee_perc,
+                creator_fee_perc,
                 tokens: KeyValueStore::new(),
+                fees_vault: Vault::new(XRD),
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(
@@ -92,22 +113,24 @@ mod token_curves {
             telegram: String,
             x: String,
             website: String,
-        ) -> (Global<TokenCurve>, NonFungibleBucket) {
-            let (new_instance, owner_badge, component_address) = Blueprint::<TokenCurve>::new(
-                name,
-                symbol,
-                description,
-                icon_url,
-                telegram,
-                x,
-                website,
-                self.max_token_supply.clone(),
-                self.max_token_supply_to_trade.clone(),
-                self.max_xrd_market_cap.clone(),
-                self.tx_fee_perc.clone(),
-                self.listing_fee_perc.clone(),
-                self.address.clone(),
-            );
+        ) -> (Global<RadixMemeTokenCurve>, NonFungibleBucket) {
+            let (new_instance, owner_badge, component_address) =
+                Blueprint::<RadixMemeTokenCurve>::new(
+                    name,
+                    symbol,
+                    description,
+                    icon_url,
+                    telegram,
+                    x,
+                    website,
+                    self.max_token_supply.clone(),
+                    self.max_token_supply_to_trade.clone(),
+                    self.max_xrd_market_cap.clone(),
+                    self.tx_fee_perc.clone(),
+                    self.listing_fee_perc.clone(),
+                    self.creator_fee_perc.clone(),
+                    self.address.clone(),
+                );
             self.tokens.insert(component_address.clone(), true);
             (new_instance, owner_badge)
         }
@@ -152,6 +175,11 @@ mod token_curves {
                     self.listing_fee_perc = Decimal::try_from(param_value)
                         .expect("Could not convert parameter value for listing_fee_perc to Decimal")
                 }
+                "creator_fee_perc" => {
+                    old_value = self.creator_fee_perc.to_string();
+                    self.creator_fee_perc = Decimal::try_from(param_value)
+                        .expect("Could not convert parameter value for creator_fee_perc to Decimal")
+                }
                 _ => panic!("Could not match parameter name"),
             };
             Runtime::emit_event(RadixMemeChangeDefaultEvent {
@@ -159,6 +187,27 @@ mod token_curves {
                 old_value,
                 new_value,
             });
+        }
+
+        pub fn claim_fee_amount(&mut self, amount: Decimal) -> Bucket {
+            assert!(
+                amount <= self.fees_vault.amount(),
+                "Not enough fees in vault."
+            );
+            let out_bucket = self.fees_vault.take(amount);
+            out_bucket
+        }
+
+        pub fn claim_all_fees(&mut self) -> Bucket {
+            self.fees_vault.take_all()
+        }
+
+        pub fn transfer_fees(&mut self, in_bucket: Bucket) {
+            assert!(
+                in_bucket.resource_address() == XRD,
+                "Can only transfer XRD fees to the RadixMemeMain component."
+            );
+            self.fees_vault.put(in_bucket);
         }
     }
 }

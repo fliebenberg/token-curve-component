@@ -1,2 +1,2 @@
-pub mod token_curve;
-pub mod token_curves;
+pub mod radix_meme_main;
+pub mod radix_meme_token_curve;

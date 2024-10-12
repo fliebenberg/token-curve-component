@@ -1,4 +1,4 @@
-use meme_token::token_curves::test_bindings::TokenCurves;
+use meme_token::radix_meme_main::test_bindings::RadixMemeMain;
 use scrypto_test::prelude::*;
 
 use super::*;
@@ -18,7 +18,7 @@ pub fn create_parent_component(
             "TokenCurves",
             "new",
             manifest_args![
-                "Radix Meme Tokens Component",
+                "Radix Meme Tokens Main Component",
                 "The main component for the Radix Meme Token Creator",
                 "https://radix.meme",
                 max_token_supply,
@@ -53,8 +53,8 @@ pub fn create_parent_component(
 pub fn get_parent_state(
     parent_address: &ComponentAddress,
     test_runner: &mut TestRunnerType,
-) -> TokenCurves {
-    let pool_state = get_component_state::<TokenCurves, NoExtension, InMemorySubstateDatabase>(
+) -> RadixMemeMain {
+    let pool_state = get_component_state::<RadixMemeMain, NoExtension, InMemorySubstateDatabase>(
         parent_address.clone(),
         test_runner,
     );

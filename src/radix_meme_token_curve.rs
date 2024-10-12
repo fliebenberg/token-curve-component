@@ -1,4 +1,4 @@
-use crate::token_curves::token_curves::TokenCurves;
+use crate::radix_meme_main::radix_meme_main::RadixMemeMain;
 use scrypto::prelude::*;
 
 #[derive(ScryptoSbor, NonFungibleData)]
@@ -24,11 +24,11 @@ struct RadixMemeTokenTradeEvent {
 
 #[blueprint]
 #[events(RadixMemeTokenCreateEvent, RadixMemeTokenTradeEvent)]
-mod token_curve {
+mod radix_meme_token_curve {
     enable_function_auth! {
         new => AccessRule::AllowAll;
     }
-    struct TokenCurve {
+    struct RadixMemeTokenCurve {
         pub parent_address: ComponentAddress, // address of the parent component that this bonding curve component is part of
         pub address: ComponentAddress,        // the address of this bonding curve component
         pub owner_badge_address: ResourceAddress, // the address of the owner badge for this token and component
@@ -40,15 +40,18 @@ mod token_curve {
         pub max_xrd: Decimal, // the maximum XRD that will be received into this component
         pub tx_fee_perc: Decimal, // fee % taken on every tx, specified in decimals 1% = 0.01,
         pub listing_fee_perc: Decimal, // fee % taken when a token is listed on external dex, specified in decimals 1% = 0.01
+        pub creator_fee_perc: Decimal, // fee % paid to the token creator when the token is listed on a dex, specified in decimals 1% = 0.01
         pub multiplier: PreciseDecimal, // the constant multiplier that is used in the bonding curve calcs. This is based on the max_supply and max_xrd values.
         pub xrd_vault: Vault,           // the vault that holds all the XRD recived by the component
         pub fee_vault: Vault,           // vault that holds all the fees earned by the component
+        pub creator_fee_vault: Vault,   // vault that holds fees earned by the creator of the token
         pub last_price: Decimal,        // the price reached with the last trade on the component
         pub current_supply: Decimal, // the current supply of the token associated with this component
         pub time_created: i64, // the date the token curve was created in seconds since unix epoch - included for easy lookup
+        pub target_reached: i64, // the date the token reached its target market cap in seconds since unix epoch
     }
 
-    impl TokenCurve {
+    impl RadixMemeTokenCurve {
         // a function that creates a new bonding curve component
         // the function takes in several values that are used to launch the new token and set up the bonding curve component
         // the function returns a global instance of the component, a bucket with the owner badge for the new token and the address of the newly created component
@@ -65,14 +68,19 @@ mod token_curve {
             max_xrd_market_cap: Decimal,
             tx_fee_perc: Decimal,
             listing_fee_perc: Decimal,
+            creator_fee_perc: Decimal,
             parent_address: ComponentAddress,
-        ) -> (Global<TokenCurve>, NonFungibleBucket, ComponentAddress) {
+        ) -> (
+            Global<RadixMemeTokenCurve>,
+            NonFungibleBucket,
+            ComponentAddress,
+        ) {
             assert!(tx_fee_perc < Decimal::ONE, "tx_fee_perc cannot be >= 1. tx_fee_perc is specified in decimals, e.g. 1% = 0.01. ");
             assert!(listing_fee_perc < Decimal::ONE, "listing_fee_perc cannot be >= 1. listing_fee_perc is specified in decimals, e.g. 1% = 0.01. ");
-            let _parent_instance = Global::<TokenCurves>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
-                                                                                        // let require_parent = rule!(require(global_caller(parent_address.clone())));
+            let _parent_instance = Global::<RadixMemeMain>::from(parent_address.clone()); // checks that the function was called from a TokenCurves component
+                                                                                          // let require_parent = rule!(require(global_caller(parent_address.clone())));
             let (address_reservation, component_address) =
-                Runtime::allocate_component_address(<TokenCurve>::blueprint_id());
+                Runtime::allocate_component_address(<RadixMemeTokenCurve>::blueprint_id());
             let require_component_rule = rule!(require(global_caller(component_address.clone())));
 
             let owner_badge = ResourceBuilder::new_ruid_non_fungible(OwnerRole::Updatable(
@@ -157,16 +165,16 @@ mod token_curve {
             dapp_def_account.set_owner_role(rule!(require(owner_badge.resource_address())));
             let dapp_def_address = GlobalAddress::from(dapp_def_account.address());
 
-            let multiplier = TokenCurve::calculate_multiplier(
+            let multiplier = RadixMemeTokenCurve::calculate_multiplier(
                 max_xrd_market_cap.clone(),
                 max_token_supply_to_trade.clone(),
             );
-            let max_xrd = TokenCurve::calculate_max_xrd(
+            let max_xrd = RadixMemeTokenCurve::calculate_max_xrd(
                 multiplier.clone(),
                 max_token_supply_to_trade.clone(),
             );
 
-            let new_token_curve = TokenCurve {
+            let new_token_curve = RadixMemeTokenCurve {
                 parent_address,
                 address: component_address.clone(),
                 owner_badge_address: owner_badge.resource_address(),
@@ -179,11 +187,14 @@ mod token_curve {
                 max_xrd,
                 tx_fee_perc,
                 listing_fee_perc,
+                creator_fee_perc,
                 multiplier,
                 xrd_vault: Vault::new(XRD),
                 fee_vault: Vault::new(XRD),
+                creator_fee_vault: Vault::new(XRD),
                 last_price: Decimal::ZERO,
-                time_created: Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch
+                time_created: Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch,
+                target_reached: 0,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(
@@ -225,8 +236,10 @@ mod token_curve {
                 // calculate fee based on available xrd only
                 fee_amount = available_xrd * self.tx_fee_perc;
                 xrd_amount = xrd_amount - fee_amount;
-                if xrd_amount > available_xrd {
+                if xrd_amount >= available_xrd {
                     xrd_amount = available_xrd;
+                    self.target_reached =
+                        Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch;
                 }
             } else {
                 xrd_amount = xrd_amount - fee_amount;
@@ -235,7 +248,7 @@ mod token_curve {
             info!("XRD Amount after fees: {}", xrd_amount);
             let mut out_bucket = Bucket::new(self.token_manager.address());
             if xrd_amount > Decimal::ZERO {
-                let receive_tokens = TokenCurve::calculate_tokens_received(
+                let receive_tokens = RadixMemeTokenCurve::calculate_tokens_received(
                     xrd_amount.clone(),
                     self.current_supply.clone(),
                     self.multiplier.clone(),
@@ -247,7 +260,7 @@ mod token_curve {
                 self.current_supply = self.current_supply + receive_tokens.clone();
                 self.xrd_vault.put(in_bucket.take(xrd_amount));
                 self.last_price =
-                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                    RadixMemeTokenCurve::calculate_price(&self.current_supply, &self.multiplier);
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("buy"),
@@ -255,6 +268,9 @@ mod token_curve {
                     xrd_amount: xrd_amount.clone(),
                     end_price: self.last_price.clone(),
                 });
+            }
+            if self.target_reached > 0 {
+                self.list_token();
             }
             (out_bucket, in_bucket)
         }
@@ -273,7 +289,7 @@ mod token_curve {
             );
             let mut out_bucket = Bucket::new(self.token_manager.address());
             if amount > Decimal::ZERO {
-                let xrd_required = TokenCurve::calculate_buy_price(
+                let xrd_required = RadixMemeTokenCurve::calculate_buy_price(
                     amount.clone(),
                     self.current_supply.clone(),
                     self.multiplier.clone(),
@@ -290,7 +306,7 @@ mod token_curve {
                 self.current_supply = self.current_supply + amount;
                 self.xrd_vault.put(in_bucket.take(xrd_required));
                 self.last_price =
-                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                    RadixMemeTokenCurve::calculate_price(&self.current_supply, &self.multiplier);
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("buy"),
@@ -316,7 +332,7 @@ mod token_curve {
             }
             let mut out_bucket = Bucket::new(XRD);
             if token_amount > Decimal::ZERO {
-                let mut receive_xrd = TokenCurve::calculate_sell_price(
+                let mut receive_xrd = RadixMemeTokenCurve::calculate_sell_price(
                     token_amount.clone(),
                     self.current_supply.clone(),
                     self.multiplier.clone(),
@@ -332,7 +348,7 @@ mod token_curve {
                 self.current_supply = self.current_supply - token_amount.clone();
                 out_bucket.put(self.xrd_vault.take(receive_xrd.clone()));
                 self.last_price =
-                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                    RadixMemeTokenCurve::calculate_price(&self.current_supply, &self.multiplier);
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("sell"),
@@ -364,7 +380,7 @@ mod token_curve {
             let mut out_bucket = Bucket::new(XRD);
             info!("In bucket amount: {:?}", in_bucket.amount());
             if amount > Decimal::ZERO {
-                let tokens_to_sell = TokenCurve::calculate_tokens_to_sell(
+                let tokens_to_sell = RadixMemeTokenCurve::calculate_tokens_to_sell(
                     amount.clone() + fee_amount.clone(),
                     self.current_supply.clone(),
                     self.multiplier.clone(),
@@ -381,7 +397,7 @@ mod token_curve {
                 self.current_supply = self.current_supply - tokens_to_sell;
                 out_bucket.put(self.xrd_vault.take(amount.clone()));
                 self.last_price =
-                    TokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                    RadixMemeTokenCurve::calculate_price(&self.current_supply, &self.multiplier);
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("sell"),
@@ -392,6 +408,11 @@ mod token_curve {
             }
             (out_bucket, in_bucket)
         }
+
+        // method to launch the token on DEX(s)
+        fn list_token(&mut self) {}
+
+        fn list_token_on_ociswap(&mut self) {}
 
         // the following calculation functions are all pure functions that (in future) can be moved to seperate components that represent different bonding curves.
         // This will allow for easier upgradability as well as easier addition of different types of bonding curves.
