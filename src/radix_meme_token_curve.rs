@@ -224,6 +224,10 @@ mod radix_meme_token_curve {
         // function returns a bucket with the bought tokens as well as a bucket with any remaining XRD (if any)
         pub fn buy(&mut self, mut in_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(
+                Runtime::get_tip_percentage() == 0,
+                "Radix.meme does not allow adding tips to transactions."
+            );
+            assert!(
                 in_bucket.resource_address() == XRD,
                 "Can only buy tokens with XRD"
             );
@@ -280,6 +284,10 @@ mod radix_meme_token_curve {
         // the function returns a bucket with the bought tokens as well as a bucket with any remaining XRD (if any)
         pub fn buy_amount(&mut self, amount: Decimal, mut in_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(
+                Runtime::get_tip_percentage() == 0,
+                "Radix.meme does not allow adding tips to transactions."
+            );
+            assert!(
                 in_bucket.resource_address() == XRD,
                 "Can only buy tokens with XRD"
             );
@@ -322,6 +330,10 @@ mod radix_meme_token_curve {
         // function takes in a bucket of tokens to sell
         // function returns a bucket of XRD from the sale as well as a bucket with any remaining tokens (if any)
         pub fn sell(&mut self, mut in_bucket: Bucket) -> (Bucket, Bucket) {
+            assert!(
+                Runtime::get_tip_percentage() == 0,
+                "Radix.meme does not allow adding tips to transactions."
+            );
             assert!(
                 in_bucket.resource_address() == self.token_manager.address(),
                 "Wrong tokens sent in bucket"
@@ -368,6 +380,10 @@ mod radix_meme_token_curve {
             amount: Decimal,
             mut in_bucket: Bucket,
         ) -> (Bucket, Bucket) {
+            assert!(
+                Runtime::get_tip_percentage() == 0,
+                "Radix.meme does not allow adding tips to transactions."
+            );
             assert!(
                 in_bucket.resource_address() == self.token_manager.address(),
                 "Wrong tokens sent in bucket"
