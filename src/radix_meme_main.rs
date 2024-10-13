@@ -39,7 +39,8 @@ mod radix_meme_main {
         pub tx_fee_perc: Decimal, // fee % taken on every tx, specified in decimals 1% = 0.01
         pub listing_fee_perc: Decimal, // fee % paid to redix.meme when a token is listed on a dex, specified in decimals 1% = 0.01
         pub creator_fee_perc: Decimal, // fee % paid to the token creator when a token is listed on a dex, specified in decimals 1% = 0.01
-        pub fees_vault: Vault,         // vault to hold fees
+        pub token_creation_fee: Decimal, // XRD fee for creating a token - might be needed for spam protection
+        pub fees_vault: Vault,           // vault to hold fees
     }
 
     impl RadixMemeMain {
@@ -55,6 +56,7 @@ mod radix_meme_main {
             tx_fee_perc: Decimal,
             listing_fee_perc: Decimal,
             creator_fee_perc: Decimal,
+            token_creation_fee: Decimal,
             owner_badge_address: ResourceAddress,
         ) -> Global<RadixMemeMain> {
             let (address_reservation, component_address) =
@@ -81,6 +83,7 @@ mod radix_meme_main {
                 tx_fee_perc,
                 listing_fee_perc,
                 creator_fee_perc,
+                token_creation_fee,
                 tokens: KeyValueStore::new(),
                 fees_vault: Vault::new(XRD),
             }
@@ -113,7 +116,25 @@ mod radix_meme_main {
             telegram: String,
             x: String,
             website: String,
-        ) -> (Global<RadixMemeTokenCurve>, NonFungibleBucket) {
+            fee_bucket: Option<Bucket>,
+        ) -> (
+            Global<RadixMemeTokenCurve>,
+            NonFungibleBucket,
+            FungibleBucket,
+        ) {
+            let mut out_bucket = Bucket::new(XRD);
+            if let Some(mut in_bucket) = fee_bucket {
+                assert!(
+                    in_bucket.resource_address() == XRD,
+                    "Only XRD can be sent for fees."
+                );
+                assert!(
+                    in_bucket.amount() >= self.token_creation_fee,
+                    "Not enough XRD sent for token creation fee."
+                );
+                self.fees_vault.put(in_bucket.take(self.token_creation_fee));
+                out_bucket.put(in_bucket);
+            }
             let (new_instance, owner_badge, component_address) =
                 Blueprint::<RadixMemeTokenCurve>::new(
                     name,
@@ -132,7 +153,7 @@ mod radix_meme_main {
                     self.address.clone(),
                 );
             self.tokens.insert(component_address.clone(), true);
-            (new_instance, owner_badge)
+            (new_instance, owner_badge, out_bucket.as_fungible())
         }
 
         pub fn change_default_parameters(&mut self, param_values: Vec<(String, String)>) {
