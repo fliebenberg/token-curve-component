@@ -41,6 +41,7 @@ mod radix_meme_main {
         pub creator_fee_perc: Decimal, // fee % paid to the token creator when a token is listed on a dex, specified in decimals 1% = 0.01
         pub token_creation_fee: Decimal, // XRD fee for creating a token - might be needed for spam protection
         pub fees_vault: Vault,           // vault to hold fees
+        pub fair_launch_period_mins: u32, // the number of minutes for a fair launch period
     }
 
     impl RadixMemeMain {
@@ -53,6 +54,7 @@ mod radix_meme_main {
             max_token_supply: Decimal,
             max_token_supply_to_trade: Decimal,
             max_xrd_market_cap: Decimal,
+            fair_launch_period_mins: u32,
             tx_fee_perc: Decimal,
             listing_fee_perc: Decimal,
             creator_fee_perc: Decimal,
@@ -86,6 +88,7 @@ mod radix_meme_main {
                 token_creation_fee,
                 tokens: KeyValueStore::new(),
                 fees_vault: Vault::new(XRD),
+                fair_launch_period_mins,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(
@@ -150,6 +153,7 @@ mod radix_meme_main {
                     self.tx_fee_perc.clone(),
                     self.listing_fee_perc.clone(),
                     self.creator_fee_perc.clone(),
+                    self.fair_launch_period_mins.clone(),
                     self.address.clone(),
                 );
             self.tokens.insert(component_address.clone(), true);
@@ -200,6 +204,18 @@ mod radix_meme_main {
                     old_value = self.creator_fee_perc.to_string();
                     self.creator_fee_perc = Decimal::try_from(param_value)
                         .expect("Could not convert parameter value for creator_fee_perc to Decimal")
+                }
+                "token_creation_fee" => {
+                    old_value = self.token_creation_fee.to_string();
+                    self.token_creation_fee = Decimal::try_from(param_value).expect(
+                        "Could not convert parameter value for token_creation_fee to Decimal",
+                    )
+                }
+                "fair_launch_period_mins" => {
+                    old_value = self.fair_launch_period_mins.to_string();
+                    self.fair_launch_period_mins = param_value.parse().expect(
+                        "Could not convert parameter value for fair_launch_period_mins to u32",
+                    );
                 }
                 _ => panic!("Could not match parameter name"),
             };

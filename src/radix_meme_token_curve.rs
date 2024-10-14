@@ -7,6 +7,11 @@ struct OwnerBadgeData {
     pub name: String,
 }
 
+#[derive(ScryptoSbor, NonFungibleData)]
+struct FairLaunchReceiptData {
+    xrd_amount: Decimal,
+}
+
 #[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
 struct RadixMemeTokenCreateEvent {
     token_address: ResourceAddress,
@@ -17,6 +22,7 @@ struct RadixMemeTokenCreateEvent {
 struct RadixMemeTokenTradeEvent {
     token_address: ResourceAddress,
     side: String,
+    fair_launch_period: bool,
     token_amount: Decimal,
     xrd_amount: Decimal,
     end_price: Decimal,
@@ -25,6 +31,7 @@ struct RadixMemeTokenTradeEvent {
 #[blueprint]
 #[events(RadixMemeTokenCreateEvent, RadixMemeTokenTradeEvent)]
 mod radix_meme_token_curve {
+
     enable_function_auth! {
         new => AccessRule::AllowAll;
     }
@@ -47,6 +54,11 @@ mod radix_meme_token_curve {
         pub creator_fee_vault: Vault,   // vault that holds fees earned by the creator of the token
         pub last_price: Decimal,        // the price reached with the last trade on the component
         pub current_supply: Decimal, // the current supply of the token associated with this component
+        pub fair_launch_period_mins: u32, // the number of mins allocated for a fair launch period
+        pub in_fair_launch_period: bool, // indicates whether the token is still in its fair_launch_period
+        pub fair_launch_receipt_manager: ResourceManager, // teh resource manager for fair launch receipts
+        pub fair_launch_tokens: Vault, // vault containing tokens that are bought during fair launch period
+        pub fair_launch_xrd: Decimal, // amount of xrd corresponding to tokens in fair launch tokens vault - used to determine tokens that cna be claimed
         pub time_created: i64, // the date the token curve was created in seconds since unix epoch - included for easy lookup
         pub target_reached: i64, // the date the token reached its target market cap in seconds since unix epoch
     }
@@ -69,6 +81,7 @@ mod radix_meme_token_curve {
             tx_fee_perc: Decimal,
             listing_fee_perc: Decimal,
             creator_fee_perc: Decimal,
+            fair_launch_period_mins: u32,
             parent_address: ComponentAddress,
         ) -> (
             Global<RadixMemeTokenCurve>,
@@ -146,6 +159,25 @@ mod radix_meme_token_curve {
                 }
             ))
             .create_with_no_initial_supply();
+            let token_address = token_manager.address();
+
+            let fair_launch_receipt_manager = ResourceBuilder::new_ruid_non_fungible::<FairLaunchReceiptData>(OwnerRole::Fixed(require_component_rule.clone()))
+            .mint_roles(mint_roles! {
+                minter => require_component_rule.clone();
+                minter_updater => AccessRule::DenyAll;
+            })
+            .burn_roles(burn_roles! {
+                burner => require_component_rule.clone();
+                burner_updater => AccessRule::DenyAll;
+            })
+            .metadata(metadata!(
+                init {
+                    "name" => format!("{} Fair Launch Receipt", symbol.clone()), updatable;
+                    "symbol" => format!("{}-FAIR", symbol.clone()), locked;
+                    "description" => format!("Radix.meme Fair launch receipt for token {}. This receipt can be redeemed for tokens after the fair launch period has expired.", symbol.clone()), locked;
+                }
+            ))
+            .create_with_no_initial_supply();
 
             // each component creates its own dapp definition account with permission granted to the token owner to change the metadata in future
             let dapp_def_account =
@@ -193,6 +225,11 @@ mod radix_meme_token_curve {
                 fee_vault: Vault::new(XRD),
                 creator_fee_vault: Vault::new(XRD),
                 last_price: Decimal::ZERO,
+                fair_launch_period_mins,
+                in_fair_launch_period: true,
+                fair_launch_receipt_manager,
+                fair_launch_tokens: Vault::new(token_address.clone()),
+                fair_launch_xrd: Decimal::ZERO,
                 time_created: Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch,
                 target_reached: 0,
             }
@@ -213,7 +250,7 @@ mod radix_meme_token_curve {
             })
             .globalize();
             Runtime::emit_event(RadixMemeTokenCreateEvent {
-                token_address: token_manager.address(),
+                token_address: token_address.clone(),
                 component_address: component_address.clone(),
             });
             (new_token_curve, owner_badge, component_address)
@@ -231,6 +268,7 @@ mod radix_meme_token_curve {
                 in_bucket.resource_address() == XRD,
                 "Can only buy tokens with XRD"
             );
+            self.check_in_fair_launch_period();
             let mut xrd_amount = in_bucket.amount();
             info!("XRD amount before fees: {}", xrd_amount);
             info!("Max xrd: {}", self.max_xrd);
@@ -250,7 +288,12 @@ mod radix_meme_token_curve {
             };
             self.fee_vault.put(in_bucket.take(fee_amount));
             info!("XRD Amount after fees: {}", xrd_amount);
-            let mut out_bucket = Bucket::new(self.token_manager.address());
+            let mut out_bucket = if self.in_fair_launch_period {
+                // create bucket with fair launch receipt address
+                Bucket::new(self.fair_launch_receipt_manager.address())
+            } else {
+                Bucket::new(self.token_manager.address())
+            };
             if xrd_amount > Decimal::ZERO {
                 let receive_tokens = RadixMemeTokenCurve::calculate_tokens_received(
                     xrd_amount.clone(),
@@ -260,7 +303,20 @@ mod radix_meme_token_curve {
                 if receive_tokens + self.current_supply > self.max_token_supply_to_trade {
                     panic!("Unexpected error! Not enough tokens remaining for tx.")
                 }
-                out_bucket.put(self.token_manager.mint(receive_tokens.clone()));
+                let new_tokens = self.token_manager.mint(receive_tokens.clone());
+                let new_tokens_amount = new_tokens.amount();
+                if self.in_fair_launch_period {
+                    // in fair launch period buyer receives a receipt that can be used to claim tokens after the fair launch period.
+                    self.fair_launch_tokens.put(new_tokens);
+                    self.fair_launch_xrd = self.fair_launch_xrd + xrd_amount;
+                    out_bucket.put(self.fair_launch_receipt_manager.mint_ruid_non_fungible(
+                        FairLaunchReceiptData {
+                            xrd_amount: xrd_amount.clone(),
+                        },
+                    ))
+                } else {
+                    out_bucket.put(new_tokens);
+                }
                 self.current_supply = self.current_supply + receive_tokens.clone();
                 self.xrd_vault.put(in_bucket.take(xrd_amount));
                 self.last_price =
@@ -268,7 +324,8 @@ mod radix_meme_token_curve {
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("buy"),
-                    token_amount: out_bucket.amount(),
+                    fair_launch_period: self.in_fair_launch_period.clone(),
+                    token_amount: new_tokens_amount.clone(),
                     xrd_amount: xrd_amount.clone(),
                     end_price: self.last_price.clone(),
                 });
@@ -295,7 +352,12 @@ mod radix_meme_token_curve {
                 amount + self.current_supply <= self.max_token_supply_to_trade,
                 "Cannot buy requested amount of tokens. Not enough supply left"
             );
-            let mut out_bucket = Bucket::new(self.token_manager.address());
+            self.check_in_fair_launch_period();
+            let mut out_bucket = if self.in_fair_launch_period {
+                Bucket::new(self.fair_launch_receipt_manager.address())
+            } else {
+                Bucket::new(self.token_manager.address())
+            };
             if amount > Decimal::ZERO {
                 let xrd_required = RadixMemeTokenCurve::calculate_buy_price(
                     amount.clone(),
@@ -310,16 +372,34 @@ mod radix_meme_token_curve {
                     panic!("Unexpected error! Max XRD will be exceeded in tx.")
                 }
                 self.fee_vault.put(in_bucket.take(fee_amount));
-                out_bucket.put(self.token_manager.mint(amount.clone()));
+                let new_tokens = self.token_manager.mint(amount.clone());
+                let new_tokens_amount = new_tokens.amount();
+                if self.in_fair_launch_period {
+                    self.fair_launch_tokens.put(new_tokens);
+                    self.fair_launch_xrd = self.fair_launch_xrd + xrd_required;
+                    out_bucket.put(self.fair_launch_receipt_manager.mint_ruid_non_fungible(
+                        FairLaunchReceiptData {
+                            xrd_amount: xrd_required.clone(),
+                        },
+                    ))
+                } else {
+                    out_bucket.put(new_tokens);
+                }
                 self.current_supply = self.current_supply + amount;
                 self.xrd_vault.put(in_bucket.take(xrd_required));
                 self.last_price =
                     RadixMemeTokenCurve::calculate_price(&self.current_supply, &self.multiplier);
+                if self.xrd_vault.amount() >= self.max_xrd {
+                    self.target_reached =
+                        Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch;
+                    self.list_token();
+                }
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("buy"),
-                    token_amount: out_bucket.amount(),
-                    xrd_amount: xrd_required.clone() + fee_amount.clone(),
+                    fair_launch_period: self.in_fair_launch_period.clone(),
+                    token_amount: new_tokens_amount.clone(),
+                    xrd_amount: xrd_required.clone(),
                     end_price: self.last_price.clone(),
                 });
             }
@@ -338,6 +418,10 @@ mod radix_meme_token_curve {
                 in_bucket.resource_address() == self.token_manager.address(),
                 "Wrong tokens sent in bucket"
             );
+            self.check_in_fair_launch_period();
+            if self.in_fair_launch_period {
+                panic!("Cannot sell tokens during fair launch period.")
+            }
             let token_amount = in_bucket.amount();
             if token_amount > self.current_supply {
                 panic!("Unexpected error! Sending more tokens to sell than current supply.");
@@ -364,6 +448,7 @@ mod radix_meme_token_curve {
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("sell"),
+                    fair_launch_period: self.in_fair_launch_period.clone(),
                     token_amount: token_amount.clone(),
                     xrd_amount: out_bucket.amount(),
                     end_price: self.last_price.clone(),
@@ -388,6 +473,10 @@ mod radix_meme_token_curve {
                 in_bucket.resource_address() == self.token_manager.address(),
                 "Wrong tokens sent in bucket"
             );
+            self.check_in_fair_launch_period();
+            if self.in_fair_launch_period {
+                panic!("Cannot sell tokens during fair launch period.")
+            }
             let fee_amount = amount * self.tx_fee_perc;
             if amount + fee_amount > self.xrd_vault.amount() {
                 panic!("Not enough XRD in component vault for requested amount.");
@@ -417,6 +506,7 @@ mod radix_meme_token_curve {
                 Runtime::emit_event(RadixMemeTokenTradeEvent {
                     token_address: self.token_manager.address(),
                     side: String::from("sell"),
+                    fair_launch_period: self.in_fair_launch_period.clone(),
                     token_amount: tokens_to_sell.clone(),
                     xrd_amount: out_bucket.amount(),
                     end_price: self.last_price.clone(),
@@ -425,10 +515,54 @@ mod radix_meme_token_curve {
             (out_bucket, in_bucket)
         }
 
-        // method to launch the token on DEX(s)
-        fn list_token(&mut self) {}
+        // function to claim tokens allocated during fair launch period
+        pub fn claim_fair_launch_tokens(&mut self, receipts_bucket: Bucket) -> Bucket {
+            let mut out_bucket = Bucket::new(self.token_manager.address());
+            self.check_in_fair_launch_period();
+            assert!(!self.in_fair_launch_period, "Fair launch period not finished. Fair launch tokens can only be claimed once fair launch period has finished.");
+            assert!(
+                receipts_bucket.resource_address() == self.fair_launch_receipt_manager.address(),
+                "Incorrect tokens submitted for claim."
+            );
+            for receipt in receipts_bucket
+                .as_non_fungible()
+                .non_fungibles::<FairLaunchReceiptData>()
+            {
+                let receipt_data = receipt.data();
+                let mut claim_tokens = self.fair_launch_tokens.amount() * receipt_data.xrd_amount
+                    / self.fair_launch_xrd;
+                if claim_tokens > self.fair_launch_tokens.amount() {
+                    claim_tokens = self.fair_launch_tokens.amount();
+                }
+                out_bucket.put(self.fair_launch_tokens.take(claim_tokens));
+                self.fair_launch_xrd = self.fair_launch_xrd - receipt_data.xrd_amount;
+            }
+            receipts_bucket.burn();
+            out_bucket
+        }
 
-        fn list_token_on_ociswap(&mut self) {}
+        fn check_in_fair_launch_period(&mut self) {
+            if self.in_fair_launch_period
+                && Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch
+                    > self.time_created
+                        + (self
+                            .fair_launch_period_mins
+                            .to_i64()
+                            .expect("Could not convert fair_launch_period_mins to i64")
+                            * 60)
+            {
+                self.end_fair_launch_period();
+            }
+        }
+
+        fn end_fair_launch_period(&mut self) {
+            self.in_fair_launch_period = false;
+        }
+
+        // method to launch the token on DEX(s)
+        fn list_token(&mut self) {
+            info!("Token will be listed!");
+        }
 
         // the following calculation functions are all pure functions that (in future) can be moved to seperate components that represent different bonding curves.
         // This will allow for easier upgradability as well as easier addition of different types of bonding curves.
