@@ -8,6 +8,11 @@ pub fn create_parent_component(
     max_token_supply: Decimal,
     max_token_supply_to_trade: Decimal,
     max_xrd_market_cap: Decimal,
+    fair_launch_period_mins: u32,
+    tx_fee_perc: Decimal,
+    listing_fee_perc: Decimal,
+    creator_fee_perc: Decimal,
+    token_creation_fee: Decimal,
     account: &AccInfo,
     test_runner: &mut TestRunnerType,
 ) -> (ComponentAddress, ComponentAddress) {
@@ -15,7 +20,7 @@ pub fn create_parent_component(
     let new_component_manifest = ManifestBuilder::new()
         .call_function(
             package_address,
-            "TokenCurves",
+            "RadixMemeMain",
             "new",
             manifest_args![
                 "Radix Meme Tokens Main Component",
@@ -24,6 +29,11 @@ pub fn create_parent_component(
                 max_token_supply,
                 max_token_supply_to_trade,
                 max_xrd_market_cap,
+                fair_launch_period_mins,
+                tx_fee_perc,
+                listing_fee_perc,
+                creator_fee_perc,
+                token_creation_fee,
                 owner_badge_address,
             ],
         )

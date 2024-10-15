@@ -4,7 +4,7 @@ pub mod utils;
 
 #[test]
 fn setup_env_test() {
-    let env = utils::setup_test_env();
+    let env = utils::setup_test_env(0, false);
     println!(
         "Test env owner account address: {:?}",
         env.owner_account.address
@@ -13,7 +13,7 @@ fn setup_env_test() {
 
 #[test]
 fn simple_buy_sell_tests() {
-    let mut env = utils::setup_test_env();
+    let mut env = utils::setup_test_env(0, false);
     // println!("Token state before buy:");
     // utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
     let _first_buy_receipt = utils::txs::token_buy(
@@ -22,7 +22,7 @@ fn simple_buy_sell_tests() {
         &env.token1_component,
         &mut env.test_runner,
     );
-    // println!("First buy receipt: {:?}", first_buy_receipt);
+    // println!("First buy receipt: {:?}", _first_buy_receipt);
     // println!("Token state after buy:");
     utils::token::show_token_state(&env.token1_component, &mut env.test_runner);
     let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
@@ -68,7 +68,7 @@ fn simple_buy_sell_tests() {
         &env.token1_component,
         &mut env.test_runner,
     );
-    // println!("Receipt after first_sell: {:?}", _first_sell_receipt);
+    println!("Receipt after first_sell: {:?}", _first_sell_receipt);
     let token_state = utils::token::get_token_state(&env.token1_component, &mut env.test_runner);
     assert!(
         token_state.last_price == dec!("0"),
@@ -243,7 +243,7 @@ fn simple_buy_sell_tests() {
 
 #[test]
 fn buy_sell_all_tokens_tests() {
-    let mut env = utils::setup_test_env();
+    let mut env = utils::setup_test_env(0, false);
     utils::load_account_with_xrd(&env.owner_account, dec!("500000"), &mut env.test_runner);
     let xrd_balance = env
         .test_runner

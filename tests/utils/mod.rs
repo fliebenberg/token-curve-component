@@ -20,18 +20,38 @@ pub struct TestEnv {
     pub parent_dapp_def: ComponentAddress,
     pub token1_component: ComponentAddress,
     pub token1_address: ResourceAddress,
+    pub tx_fee_perc: Decimal,
+    pub listing_fee_perc: Decimal,
+    pub creator_fee_perc: Decimal,
+    pub token_creation_fee: Decimal,
 }
 
-pub fn setup_test_env() -> TestEnv {
+pub fn setup_test_env(fair_launch_period: u32, with_fees: bool) -> TestEnv {
     let mut test_runner = TestRunnerBuilder::new().without_trace().build();
     let owner_account = create_new_account(&mut test_runner);
     let owner_badge_address =
         test_runner.create_fungible_resource(dec!(1), DIVISIBILITY_MAXIMUM, owner_account.address);
+    let mut tx_fee_perc = dec!("0");
+    let mut listing_fee_perc = dec!("0");
+    let mut creator_fee_perc = dec!("0");
+    let mut token_creation_fee = dec!("0");
+    if with_fees {
+        tx_fee_perc = dec!("0.01");
+        listing_fee_perc = dec!("0.05");
+        creator_fee_perc = dec!("0.05");
+        token_creation_fee = dec!("100");
+    }
+
     let (parent_component, parent_dapp_def) = parent::create_parent_component(
         &owner_badge_address,
         dec!("1000000"),
         dec!("1000000"),
         dec!("1000000"),
+        fair_launch_period,
+        tx_fee_perc.clone(),
+        listing_fee_perc.clone(),
+        creator_fee_perc.clone(),
+        token_creation_fee.clone(),
         &owner_account,
         &mut test_runner,
     );
@@ -40,9 +60,10 @@ pub fn setup_test_env() -> TestEnv {
         String::from("FIRST"),
         String::from("The first token on Radix Meme Tokens"),
         String::from("https://dexteronradix.com/dexter-logo-and-lettering.svg"),
-        String::from("telegram"),
-        String::from("x"),
+        String::from(""),
+        String::from(""),
         String::from("https://radix.meme"),
+        token_creation_fee.clone(),
         &parent_component,
         &owner_account,
         &mut test_runner,
@@ -55,6 +76,10 @@ pub fn setup_test_env() -> TestEnv {
         parent_dapp_def,
         token1_component,
         token1_address,
+        tx_fee_perc,
+        listing_fee_perc,
+        creator_fee_perc,
+        token_creation_fee,
     }
 }
 

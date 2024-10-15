@@ -28,12 +28,56 @@ struct RadixMemeTokenTradeEvent {
     end_price: Decimal,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
+struct RadixMemeClaimTokensEvent {
+    tokens_claimed: Decimal,
+    xrd_amount: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
+struct RadixMemeClaimFeeEvent {
+    fee_claimed: Decimal,
+}
+
 #[blueprint]
-#[events(RadixMemeTokenCreateEvent, RadixMemeTokenTradeEvent)]
+#[events(
+    RadixMemeTokenCreateEvent,
+    RadixMemeTokenTradeEvent,
+    RadixMemeClaimFeeEvent
+)]
 mod radix_meme_token_curve {
 
     enable_function_auth! {
         new => AccessRule::AllowAll;
+    }
+
+    // enable_method_auth! {
+    //     roles {
+    //         admin => updatable_by: [OWNER];
+    //         owner => updatable_by: [OWNER];
+    //     },
+    //     methods {
+    //         new_token_curve_simple => PUBLIC;
+    //         change_default_parameters => restrict_to: [admin];
+    //         claim_fee_amount => restrict_to: [owner];
+    //         claim_all_fees => restrict_to:[owner];
+    //         transfer_fees => PUBLIC;
+    //     }
+    // }
+
+    enable_method_auth! {
+        roles {
+            creator => updatable_by: [OWNER];
+            radix_meme_admin => updatable_by: [radix_meme_admin];
+        },
+        methods {
+            buy => PUBLIC;
+            buy_amount => PUBLIC;
+            sell => PUBLIC;
+            sell_for_xrd_amount => PUBLIC;
+            claim_fair_launch_tokens => PUBLIC;
+            claim_all_fees => restrict_to: [radix_meme_admin];
+        }
     }
     struct RadixMemeTokenCurve {
         pub parent_address: ComponentAddress, // address of the parent component that this bonding curve component is part of
@@ -83,6 +127,7 @@ mod radix_meme_token_curve {
             creator_fee_perc: Decimal,
             fair_launch_period_mins: u32,
             parent_address: ComponentAddress,
+            parent_owner_rule: AccessRule,
         ) -> (
             Global<RadixMemeTokenCurve>,
             NonFungibleBucket,
@@ -226,7 +271,7 @@ mod radix_meme_token_curve {
                 creator_fee_vault: Vault::new(XRD),
                 last_price: Decimal::ZERO,
                 fair_launch_period_mins,
-                in_fair_launch_period: true,
+                in_fair_launch_period: if fair_launch_period_mins > 0 {true} else {false},
                 fair_launch_receipt_manager,
                 fair_launch_tokens: Vault::new(token_address.clone()),
                 fair_launch_xrd: Decimal::ZERO,
@@ -238,6 +283,10 @@ mod radix_meme_token_curve {
                 owner_badge.resource_address()
             ))))
             .with_address(address_reservation)
+            .roles(roles! {
+                creator => rule!(require(owner_badge.resource_address()));
+                radix_meme_admin => parent_owner_rule.clone();
+            })
             .metadata(metadata! {
                 init {
                     "name" => format!("Radix.meme: {}", symbol.clone()), updatable;
@@ -518,6 +567,7 @@ mod radix_meme_token_curve {
         // function to claim tokens allocated during fair launch period
         pub fn claim_fair_launch_tokens(&mut self, receipts_bucket: Bucket) -> Bucket {
             let mut out_bucket = Bucket::new(self.token_manager.address());
+            let mut total_xrd = Decimal::ZERO;
             self.check_in_fair_launch_period();
             assert!(!self.in_fair_launch_period, "Fair launch period not finished. Fair launch tokens can only be claimed once fair launch period has finished.");
             assert!(
@@ -529,6 +579,7 @@ mod radix_meme_token_curve {
                 .non_fungibles::<FairLaunchReceiptData>()
             {
                 let receipt_data = receipt.data();
+                total_xrd = total_xrd + receipt_data.xrd_amount;
                 let mut claim_tokens = self.fair_launch_tokens.amount() * receipt_data.xrd_amount
                     / self.fair_launch_xrd;
                 if claim_tokens > self.fair_launch_tokens.amount() {
@@ -538,7 +589,18 @@ mod radix_meme_token_curve {
                 self.fair_launch_xrd = self.fair_launch_xrd - receipt_data.xrd_amount;
             }
             receipts_bucket.burn();
+            Runtime::emit_event(RadixMemeClaimTokensEvent {
+                tokens_claimed: out_bucket.amount(),
+                xrd_amount: total_xrd.clone(),
+            });
             out_bucket
+        }
+
+        pub fn claim_all_fees(&mut self) -> Bucket {
+            Runtime::emit_event(RadixMemeClaimFeeEvent {
+                fee_claimed: self.fee_vault.amount(),
+            });
+            self.fee_vault.take_all()
         }
 
         fn check_in_fair_launch_period(&mut self) {

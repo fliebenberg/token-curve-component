@@ -9,7 +9,13 @@ struct RadixMemeChangeDefaultEvent {
     old_value: String,
     new_value: String,
 }
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Debug)]
+struct RadixMemeClaimFeeEvent {
+    fee_claimed: Decimal,
+}
+
 #[blueprint]
+#[events(RadixMemeClaimFeeEvent)]
 mod radix_meme_main {
     enable_function_auth! {
         new => AccessRule::AllowAll;
@@ -95,6 +101,10 @@ mod radix_meme_main {
                 owner_badge_address.clone()
             ))))
             .with_address(address_reservation)
+            .roles(roles! {
+                admin => rule!(require(owner_badge_address.clone()));
+                owner => rule!(require(owner_badge_address.clone()));
+            })
             .metadata(metadata! {
                 init {
                 "name" => name, updatable;
@@ -119,24 +129,19 @@ mod radix_meme_main {
             telegram: String,
             x: String,
             website: String,
-            fee_bucket: Option<Bucket>,
-        ) -> (
-            Global<RadixMemeTokenCurve>,
-            NonFungibleBucket,
-            FungibleBucket,
-        ) {
-            let mut out_bucket = Bucket::new(XRD);
-            if let Some(mut in_bucket) = fee_bucket {
+            mut fee_bucket: Bucket,
+        ) -> (Global<RadixMemeTokenCurve>, NonFungibleBucket, Bucket) {
+            if self.token_creation_fee > Decimal::ZERO {
                 assert!(
-                    in_bucket.resource_address() == XRD,
+                    fee_bucket.resource_address() == XRD,
                     "Only XRD can be sent for fees."
                 );
                 assert!(
-                    in_bucket.amount() >= self.token_creation_fee,
+                    fee_bucket.amount() >= self.token_creation_fee,
                     "Not enough XRD sent for token creation fee."
                 );
-                self.fees_vault.put(in_bucket.take(self.token_creation_fee));
-                out_bucket.put(in_bucket);
+                self.fees_vault
+                    .put(fee_bucket.take(self.token_creation_fee));
             }
             let (new_instance, owner_badge, component_address) =
                 Blueprint::<RadixMemeTokenCurve>::new(
@@ -155,9 +160,10 @@ mod radix_meme_main {
                     self.creator_fee_perc.clone(),
                     self.fair_launch_period_mins.clone(),
                     self.address.clone(),
+                    rule!(require(self.owner_badge_manager.address())),
                 );
             self.tokens.insert(component_address.clone(), true);
-            (new_instance, owner_badge, out_bucket.as_fungible())
+            (new_instance, owner_badge, fee_bucket)
         }
 
         pub fn change_default_parameters(&mut self, param_values: Vec<(String, String)>) {
@@ -232,10 +238,16 @@ mod radix_meme_main {
                 "Not enough fees in vault."
             );
             let out_bucket = self.fees_vault.take(amount);
+            Runtime::emit_event(RadixMemeClaimFeeEvent {
+                fee_claimed: out_bucket.amount(),
+            });
             out_bucket
         }
 
         pub fn claim_all_fees(&mut self) -> Bucket {
+            Runtime::emit_event(RadixMemeClaimFeeEvent {
+                fee_claimed: self.fees_vault.amount(),
+            });
             self.fees_vault.take_all()
         }
 

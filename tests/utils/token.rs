@@ -11,15 +11,33 @@ pub fn create_token_curve_component(
     telegram: String,
     x: String,
     website: String,
+    token_creation_fee: Decimal,
     component_address: &ComponentAddress,
     account: &AccInfo,
     test_runner: &mut TestRunnerType,
 ) -> (ComponentAddress, ComponentAddress, ResourceAddress) {
     let new_component_manifest = ManifestBuilder::new()
         .call_method(
+            account.address.clone(),
+            "withdraw",
+            manifest_args![XRD, token_creation_fee.clone()],
+        )
+        .take_all_from_worktop(XRD, "fee_bucket")
+        .call_method_with_name_lookup(
             component_address.clone(),
             "new_token_curve_simple",
-            manifest_args![name, symbol, description, icon_url, telegram, x, website,],
+            |lookup| {
+                (
+                    name,
+                    symbol,
+                    description,
+                    icon_url,
+                    telegram,
+                    x,
+                    website,
+                    lookup.bucket("fee_bucket"),
+                )
+            },
         )
         .try_deposit_entire_worktop_or_abort(account.address, None)
         .build();
