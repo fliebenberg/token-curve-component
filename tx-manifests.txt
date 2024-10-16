@@ -1,0 +1,4 @@
+CALL_FUNCTION Address("package_tdx_2_1p42tj7ka7dsk8ytenr0lekcyzqzdpphkkg5adv4jwwzwdlpx4r2pc4") "RadixMemeMain" "new" 
+"Radix.meme Main Component" "The main component for Radix.meme" "https://radix.meme" 
+Decimal("1000000") Decimal("1000000") Decimal("1000000") 1u32 Decimal("0.01") Decimal("0.05") Decimal("0.05") Decimal("5") 
+Address("resource_tdx_2_1thyftl364ln25dfl5qt92ayj3k2q3z69f3s05hwwd7nr8szrj3ka25");
