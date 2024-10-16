@@ -15,7 +15,7 @@ struct RadixMemeClaimFeeEvent {
 }
 
 #[blueprint]
-#[events(RadixMemeClaimFeeEvent)]
+#[events(RadixMemeClaimFeeEvent, RadixMemeChangeDefaultEvent)]
 mod radix_meme_main {
     enable_function_auth! {
         new => AccessRule::AllowAll;

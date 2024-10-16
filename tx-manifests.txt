@@ -1,11 +1,6 @@
 // Create RadixMemeMain component
-CALL_METHOD
-    Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
-    "lock_fee"
-    Decimal("1.0952803178665")
-;
 CALL_FUNCTION
-    Address("package_tdx_2_1p42tj7ka7dsk8ytenr0lekcyzqzdpphkkg5adv4jwwzwdlpx4r2pc4")
+    Address("package_tdx_2_1phg9efl4n0ea03twktjx79ujy29jqzgq8t3qr6k60a5mwede4667md")
     "RadixMemeMain"
     "new"
     "Radix.meme Main Component"
@@ -14,7 +9,7 @@ CALL_FUNCTION
     Decimal("1000000")
     Decimal("1000000")
     Decimal("1000000")
-    1u32
+    0u32
     Decimal("0.01")
     Decimal("0.05")
     Decimal("0.05")
@@ -30,7 +25,7 @@ CALL_METHOD
     Address("resource_tdx_2_1thyftl364ln25dfl5qt92ayj3k2q3z69f3s05hwwd7nr8szrj3ka25")
     Decimal("1");
 CALL_METHOD
-    Address("component_tdx_2_1cpa9j9x97465w6p37dpdy40cg9h2jd0tml9sj0q2anetkz25pudj90")
+    Address("component_tdx_2_1cqrax88r98g3x02n93fpn7jfpx8gtg7tfvp396aq2kgd870acwedwh")
     "change_default_parameter"
     "fair_launch_period_mins","0";
 CALL_METHOD
