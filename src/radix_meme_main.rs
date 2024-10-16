@@ -29,6 +29,7 @@ mod radix_meme_main {
         methods {
             new_token_curve_simple => PUBLIC;
             change_default_parameters => restrict_to: [admin];
+            change_default_parameter => restrict_to: [admin];
             claim_fee_amount => restrict_to: [owner];
             claim_all_fees => restrict_to:[owner];
             transfer_fees => PUBLIC;
@@ -172,7 +173,7 @@ mod radix_meme_main {
             }
         }
 
-        fn change_default_parameter(&mut self, param_name: String, param_value: String) {
+        pub fn change_default_parameter(&mut self, param_name: String, param_value: String) {
             let old_value: String;
             let new_value = param_value.clone();
             match param_name.as_str() {
