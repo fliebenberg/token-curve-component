@@ -1,6 +1,6 @@
 // Create RadixMemeMain component
 CALL_FUNCTION
-    Address("package_tdx_2_1phg9efl4n0ea03twktjx79ujy29jqzgq8t3qr6k60a5mwede4667md")
+    Address("package_tdx_2_1phf40pu6ptx600h8dvr0zkjaadqy5qm90nl9wl0nnkkhf67lufflve")
     "RadixMemeMain"
     "new"
     "Radix.meme Main Component"
@@ -17,17 +17,58 @@ CALL_FUNCTION
     Address("resource_tdx_2_1thyftl364ln25dfl5qt92ayj3k2q3z69f3s05hwwd7nr8szrj3ka25")
 ;
 
+// Create RadixMemeTokenCurve component
+CALL_METHOD
+    Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Decimal("5");
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("fee_bucket");
+CALL_METHOD
+    Address("component_tdx_2_1crfd2l929ngd23wkvdx2v7sg66qr68tgawea97809ts7wh7ck5cpk9")
+    "new_token_curve_simple"
+    "New Token"
+    "NEW"
+    "An example new token on Radix.meme"
+    "https://www.radix.meme/_next/image?url=https%3A%2F%2Ffuchsia-dramatic-heron-401.mypinata.cloud%2Fipfs%2Fbafybeigetur7npc42pwjniq4trimmnqxoihivggkyymb2mznulvyo5qhhe&w=640&q=75"
+    ""
+    ""
+    "https://radix.meme"
+    Bucket("fee_bucket");
+CALL_METHOD
+    Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP");
 
-// Change RadixMemeMain variable
+
+// Change RadixMemeMain default variables
 CALL_METHOD
     Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
     "create_proof_of_amount"
     Address("resource_tdx_2_1thyftl364ln25dfl5qt92ayj3k2q3z69f3s05hwwd7nr8szrj3ka25")
     Decimal("1");
 CALL_METHOD
-    Address("component_tdx_2_1cqrax88r98g3x02n93fpn7jfpx8gtg7tfvp396aq2kgd870acwedwh")
+    Address("component_tdx_2_1crfd2l929ngd23wkvdx2v7sg66qr68tgawea97809ts7wh7ck5cpk9")
+    "change_default_parameters"
+    Array<Tuple>(Tuple("fair_launch_period_mins","1"));
+CALL_METHOD
+    Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP");
+
+
+// Change RadixMemeMain default variable
+CALL_METHOD
+    Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
+    "create_proof_of_amount"
+    Address("resource_tdx_2_1thyftl364ln25dfl5qt92ayj3k2q3z69f3s05hwwd7nr8szrj3ka25")
+    Decimal("1");
+CALL_METHOD
+    Address("component_tdx_2_1crfd2l929ngd23wkvdx2v7sg66qr68tgawea97809ts7wh7ck5cpk9")
     "change_default_parameter"
-    "fair_launch_period_mins","0";
+    "fair_launch_period_mins" "1";
 CALL_METHOD
     Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
     "deposit_batch"
@@ -43,6 +84,25 @@ CALL_METHOD
 CALL_METHOD
     Address("component_tdx_2_1cpa9j9x97465w6p37dpdy40cg9h2jd0tml9sj0q2anetkz25pudj90")
     "claim_all_fees";
+CALL_METHOD
+    Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP");
+
+
+// Buy tokens
+CALL_METHOD
+    Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Decimal("50");
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket");
+CALL_METHOD
+    Address("component_tdx_2_1crnnxj96jpgxghnkaax5vtua9qe6ww4tc6u5mw925ch5ryxr37jcr5")
+    "buy"
+    Bucket("xrd_bucket");
 CALL_METHOD
     Address("account_tdx_2_128ntdeqsshu3a8xpmyrf6asur4dxykhar9ms936s840fagslm3hetq")
     "deposit_batch"
